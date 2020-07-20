@@ -781,3 +781,107 @@ def get_flap_polars(run_xfoil_params, afi):
     
     return cl_interp_flaps_af, cd_interp_flaps_af, cm_interp_flaps_af, fa_control_af, Re_loc_af, Ma_loc_af
 
+def general_dac_mod(alpha,cl,cd,cm,clmax_ratio,stall_shift,LD_ratio,alpha0_shift,S_ratio,CD0_shift):
+    da = 0.1
+    a_ind_ps = find_prestall_range(alpha,cl)
+    A0 = find_alpha0(alpha,cl,a_ind_ps)
+    S1 = find_liftcurve_slope(alpha,cl,A0)
+    ACLmax = a_ind_ps(1)
+    Clmax = cl(ACLmax)
+    Cdmax = cd(ACLmax)
+    Cmmax = cm(ACLmax)
+    LD = Clmax/Cdmax
+    CD0 = find_C0(alpha,cd,A0)
+    CM0 = find_C0(alpha,cm,A0)
+    amax = (Cmmax-CM0)/Clmax
+
+    A0 -= alpha0_shift
+    S1 *= S_ratio
+    CD0 += CD0_shift
+    Clmax *= clmax_ratio
+    ACLmax -= (stall_shift + alpha0_shift)
+    LD *= LD_ratio
+    Cdmax_2 = Clmax/LD
+
+    CD2max = 1.5
+    M = 2.0
+    n = ((a_ind_ps[1] + 3.0)-(a_ind_ps[0] - 3.0))/da+1
+
+    a_mod = np.zeros(n)
+    cl_mod = np.zeros(n)
+    cd_mod = np.zeros(n)
+    cm_mod = np.zeros(n)
+
+    RCL = S1*(ACLmax - A0) - Clmax
+    N1 = 1 + Clmax/RCL
+
+
+    for j in range(a_mod):
+        a_mod[j] = a_ind_ps[0] - 3.0 + j*da
+
+        if a_mod[j] < A0:
+            cl_mod[j] = S1*(a_mod[j]-A0) + RCL*((A0-a_mod[j])/(ACLmax-A0))**N1
+        else:
+            cl_mod[j] = S1*(a_mod[j]-A0) - RCL*((a_mod[j]-A0)/(ACLmax-A0))**N1
+
+        if a_mod[j] < (2*A0-ACLmax):
+            cd_mod[j] = Cdmax_2 + (CD2max - Cdmax_2)*np.sin(((2*A0-a_mod[j])-ACLmax)/(90.-ACLmax)*np.pi/2.)
+        elif a_mod[j] >= (2*A0-ACLmax)  and a_mod[j] <= ACLmax:
+            cd_mod[j] = CD0 + (Cdmax_2-CD0)*((a_mod[j]-A0)/(ACLmax-A0))**M
+        else:
+            cd_mod[j] = Cdmax_2 + (CD2max - Cdmax_2)*np.sin((a_mod[j]-ACLmax)/(90.-ACLmax)*np.pi/2.) 
+        
+        a = amax*(a_mod[j]-A0)/(ACLmax-A0)
+        cm_mod[j] = a*cl_mod[j] + CM0 - alpha0_shift*S1/8.
+
+    return a_mod, cl_mod, cd_mod, cm_mod 
+
+def find_prestall_range(alpha,cl):
+    for ind in range(alpha):
+        if alpha[ind]>=-25. and alpha[ind]<=25.: # Reasonable range of AoA for pre-stall range
+            if ind != 0 and ind != len(alpha)-1: # Avoiding end points (need to look at slopes to find maxima/minima)
+                if (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.: # Finding minimum lift for negative stall
+                    a_min_ind = ind
+                elif (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.: # Finding maximum lift for positive stall
+                    a_max_ind = ind
+            elif ind == 0: # Dealing with possibility of negative stall not captured
+                if cl[ind] <= cl[ind+1]:
+                    a_min_ind = ind
+            else: # Dealing with possibility where positive stall is not captured
+                if cl[ind-1] <= cl[ind]:
+                    a_max_ind = ind
+    
+    return a_min_ind, a_max_ind
+
+def find_alpha0(alpha,cl,a_ind_range):
+    for ind in range(alpha):
+        if ind >= a_ind_range(0) and ind <=a_ind_range(1):
+            if cl[ind]<=0. and cl[ind+1]>0.:
+                alpha0 = (-alpha[ind+1]+alpha[ind])/(cl[ind+1]-cl[ind])*(cl[ind])+alpha[ind]
+
+    return alpha0
+
+def find_liftcurve_slope(alpha,cl,alpha0 = 0.):
+    for ind in range(alpha):
+        if alpha[ind] <= alpha0-3. and alpha[ind+1] >= alpha0-3.:
+            a_min = alpha[ind]
+            cl_min = cl[ind]
+        elif alpha[ind] <= alpha0+3. and alpha[ind+1] >= alpha0+3.:
+            a_max = alpha[ind]
+            cl_max = cl[ind]
+            break
+
+    slope = (cl_max-cl_min)/(a_max-a_min)
+
+    return slope
+
+def find_C0(alpha,c,alpha0 = 0.):
+    for ind in range(alpha):
+        if alpha[ind] <= alpha0 and alpha[ind+1] >= alpha0:
+            C0 = (c[ind+1]-c[ind])/(alpha[ind+1]-alpha[ind])*(alpha0-alpha[ind])+c[ind]
+            break
+
+    return C0
+
+
+
