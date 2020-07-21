@@ -782,19 +782,59 @@ def get_flap_polars(run_xfoil_params, afi):
     return cl_interp_flaps_af, cd_interp_flaps_af, cm_interp_flaps_af, fa_control_af, Re_loc_af, Ma_loc_af
 
 def general_dac_mod(alpha,cl,cd,cm,clmax_ratio,stall_shift,LD_ratio,alpha0_shift,S_ratio,CD0_shift):
-    da = 0.1
-    a_ind_ps = find_prestall_range(alpha,cl)
-    A0 = find_alpha0(alpha,cl,a_ind_ps)
-    S1 = find_liftcurve_slope(alpha,cl,A0)
-    ACLmax = a_ind_ps(1)
-    Clmax = cl(ACLmax)
-    Cdmax = cd(ACLmax)
-    Cmmax = cm(ACLmax)
-    LD = Clmax/Cdmax
+    '''
+    Models changes to lift, drag, and moment polars to mimic the effects of an active aerodynamic flow device.
+
+    Parameters:
+    -----------
+    alpha: 1D array
+        Values of angle of attack (AoA) for unmodified polars
+    cl: 1D array
+        Values of lift coefficient for unmodified polars
+    cd: 1D array
+        Values of drag coefficient for unmodified polars
+    cm: 1D array
+        Values of moment coefficient for unmodified polars
+    clmax_ratio: float
+        Ratio of maximum lift coefficients (near stall) for modified over unmodified value
+    stall_shift: float
+        A shift in the value of the AoA location where maximum cl occurs in degrees (a positive value shifts the modified stall point to the left, stall occurs at a lower AoA)
+    LD_ratio: float
+        Ratio of maximum lift-to-drag ratios between modified and unmodified polars (value greater than 1 means the lift-to-drag ratio of the modified polar will be greater than the unmodified polar)
+    alpha0_shift: float
+        A shift in the value of zero lift AoA in degrees (a positive value willshift the zero lift angle of attack to the left)
+    S_ratio: float
+        ratio of lift curve slopes between modified and unmodified [1/deg] (a value less than ones means modified lift curve slope is less than unmodified)
+    CD0_shift: float
+        A shift in the drag coefficient at zero-lift AoA (a positive value will increaae the drag coefficient at zero lift AoA)
+
+    Returns:
+    --------
+    a_mod: 1D array
+        angle of attack values for modified polars
+    cl_mod: 1D array
+        lift coefficient values for modified polars
+    cd_mod: 1D array
+        drag coefficient values for modified polars
+    cm_mod: 1D array
+        moment coefficient values for modified polars
+    '''
+    # Initializing variables from unmodified polars
+    da = 0.1                                            # Step size for modified angle of attack values
+    a_ind_ps = find_prestall_range(alpha,cl)            # finds starting and ending indicies for unstalled arifoil conditions
+    A0 = find_alpha0(alpha,cl,a_ind_ps)                 # finds zero lift angle of attack
+    S1 = find_liftcurve_slope(alpha,cl,A0)              # finds lift curve slope
+    ACLmax_ind = a_ind_ps[1]
+    ACLmax = alpha[ACLmax_ind]
+    Clmax = cl[ACLmax_ind]
+    Cdmax = cd[ACLmax_ind]
+    Cmmax = cm[ACLmax_ind]
+    LD = Clmax/Cdmax                                    # calculate max L/D
     CD0 = find_C0(alpha,cd,A0)
     CM0 = find_C0(alpha,cm,A0)
-    amax = (Cmmax-CM0)/Clmax
+    amax = (Cmmax-CM0)/Clmax                            # shifted moment arm approximation for moment coefficient at maximum lift point
 
+    # Modifying variables according to input parameters
     A0 -= alpha0_shift
     S1 *= S_ratio
     CD0 += CD0_shift
@@ -803,15 +843,17 @@ def general_dac_mod(alpha,cl,cd,cm,clmax_ratio,stall_shift,LD_ratio,alpha0_shift
     LD *= LD_ratio
     Cdmax_2 = Clmax/LD
 
-    CD2max = 1.5
+    CD2max = 1.5                                        # assumed value for max Cd post stall (blunt body drag coefficient)
     M = 2.0
-    n = ((a_ind_ps[1] + 3.0)-(a_ind_ps[0] - 3.0))/da+1
+    n = ((a_ind_ps[1] + 3.0)-(a_ind_ps[0] - 3.0))/da+1  # Number of angles of attack
 
+    # Initializing output matricies
     a_mod = np.zeros(n)
     cl_mod = np.zeros(n)
     cd_mod = np.zeros(n)
     cm_mod = np.zeros(n)
 
+    # Calculating modified lift, drag, and moment coefficients
     RCL = S1*(ACLmax - A0) - Clmax
     N1 = 1 + Clmax/RCL
 
@@ -837,36 +879,87 @@ def general_dac_mod(alpha,cl,cd,cm,clmax_ratio,stall_shift,LD_ratio,alpha0_shift
     return a_mod, cl_mod, cd_mod, cm_mod 
 
 def find_prestall_range(alpha,cl):
+    '''
+    Searches lift polar to find indicies where postive and negative stall occur (ignores deep stall and extrapolated data beyone natural stall points of most airfoils)
+
+    Parameters:
+    -----------
+    alpha: 1D array
+        Values of angle of attack (AoA) for polar
+    cl: 1D array
+        Values of lift coefficient for polars
+
+    Returns:
+    --------
+    a_min_ind: int
+        Index where minimum lift occurs (near negative stall point)
+    a_max_ind: int
+        Index where maximum lift occurs (near positive stall point)
+    '''
     for ind in range(alpha):
-        if alpha[ind]>=-25. and alpha[ind]<=25.: # Reasonable range of AoA for pre-stall range
-            if ind != 0 and ind != len(alpha)-1: # Avoiding end points (need to look at slopes to find maxima/minima)
-                if (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.: # Finding minimum lift for negative stall
+        if alpha[ind]>=-25. and alpha[ind]<=25.:                                    # Reasonable range of AoA for pre-stall range for most airfoils
+            if ind != 0 and ind != len(alpha)-1:                                    # Avoiding end points (need to look at slopes to find maxima/minima)
+                if (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.:      # Finding minimum lift for negative stall
                     a_min_ind = ind
-                elif (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.: # Finding maximum lift for positive stall
+                elif (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.:    # Finding maximum lift for positive stall
                     a_max_ind = ind
-            elif ind == 0: # Dealing with possibility of negative stall not captured
+            elif ind == 0:                                                          # Dealing with possibility of negative stall not captured
                 if cl[ind] <= cl[ind+1]:
                     a_min_ind = ind
-            else: # Dealing with possibility where positive stall is not captured
+            else:                                                                   # Dealing with possibility where positive stall is not captured
                 if cl[ind-1] <= cl[ind]:
                     a_max_ind = ind
     
     return a_min_ind, a_max_ind
 
 def find_alpha0(alpha,cl,a_ind_range):
+    '''
+    Searches lift polar over specified range of angle of attack (pre-stall range) to find value of zero-lift angle of attack through interpolation of lift polar
+
+    Parameters:
+    -----------
+    alpha: 1D array
+        Values of angle of attack (AoA) for polar
+    cl: 1D array
+        Values of lift coefficient for polars
+    a_ind_range: 1D array
+        Array with 2 values: index for lower bound of search, index for upper bound of search
+
+    Returns:
+    --------
+    alpha0: float
+        Value of zero-lift angle of attack
+    '''
     for ind in range(alpha):
-        if ind >= a_ind_range(0) and ind <=a_ind_range(1):
-            if cl[ind]<=0. and cl[ind+1]>0.:
-                alpha0 = (-alpha[ind+1]+alpha[ind])/(cl[ind+1]-cl[ind])*(cl[ind])+alpha[ind]
+        if ind >= a_ind_range[0] and ind <=a_ind_range[1]:
+            if cl[ind]<=0. and cl[ind+1]>0.:                                                    # Finding where lift transitions form negative to positive
+                alpha0 = (-alpha[ind+1]+alpha[ind])/(cl[ind+1]-cl[ind])*(cl[ind])+alpha[ind]    # Linear interpolation between two points
 
     return alpha0
 
 def find_liftcurve_slope(alpha,cl,alpha0 = 0.):
+    '''
+    Calculates lift curve slope in linear range of a given lift polar
+
+    Parameters:
+    -----------
+    alpha: 1D array
+        Values of angle of attack (AoA) for polar
+    cl: 1D array
+        Values of lift coefficient for polars
+    alpha0: float
+        Value of zero lift angle of attack (defaults to zero if none given)
+
+    Returns:
+    --------
+    slope: float
+        lift curve slope
+    '''
     for ind in range(alpha):
-        if alpha[ind] <= alpha0-3. and alpha[ind+1] >= alpha0-3.:
+        if alpha[ind] <= alpha0-3. and alpha[ind+1] >= alpha0-3.:       # Lower bound for slop approximately 3 deg below zero-lift AoA
             a_min = alpha[ind]
             cl_min = cl[ind]
-        elif alpha[ind] <= alpha0+3. and alpha[ind+1] >= alpha0+3.:
+        elif alpha[ind] <= alpha0+3. and alpha[ind+1] >= alpha0+3.:     # Upper bound for slop approximately 3 deg above zero-lift AoA
             a_max = alpha[ind]
             cl_max = cl[ind]
             break
@@ -876,9 +969,26 @@ def find_liftcurve_slope(alpha,cl,alpha0 = 0.):
     return slope
 
 def find_C0(alpha,c,alpha0 = 0.):
+    '''
+    Calculates interpolated value of a coeficient (lift, drag, moment, etc.) about a certain angle of attack
+
+    Parameters:
+    -----------
+    alpha: 1D array
+        Values of angle of attack (AoA) for polar
+    c: 1D array
+        Values of coefficient for polars
+    alpha0: float
+        Value of angle of attack being interpolated about (defaults to zero if none given)
+
+    Returns:
+    --------
+    C0: float
+        Interpolated value of coefficient
+    '''
     for ind in range(alpha):
-        if alpha[ind] <= alpha0 and alpha[ind+1] >= alpha0:
-            C0 = (c[ind+1]-c[ind])/(alpha[ind+1]-alpha[ind])*(alpha0-alpha[ind])+c[ind]
+        if alpha[ind] <= alpha0 and alpha[ind+1] >= alpha0:                                 # Finds location of segment to be interpolated between
+            C0 = (c[ind+1]-c[ind])/(alpha[ind+1]-alpha[ind])*(alpha0-alpha[ind])+c[ind]     # Linear interpolation
             break
 
     return C0
