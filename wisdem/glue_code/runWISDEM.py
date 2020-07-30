@@ -152,7 +152,7 @@ def run_wisdem(fname_wt_input, fname_analysis_options, fname_opt_options, fname_
                     n_OF_runs += len(analysis_options['openfast']['dlc_settings']['Power_Curve']['U'])*len(analysis_options['openfast']['dlc_settings']['Power_Curve']['Seeds'])
                 else:
                     n_OF_runs += len(analysis_options['openfast']['dlc_settings']['Power_Curve']['U'])
-            if analysis_options['openfast']['dlc_settings']['run_IEC']:
+            if analysis_options['openfast']['dlc_settings']['run_IEC'] or analysis_options['openfast']['dlc_settings']['run_blade_fatigue']:
                 for dlc in analysis_options['openfast']['dlc_settings']['IEC']:
                     dlc_vars = list(dlc.keys())
                     # Number of wind speeds
@@ -332,10 +332,7 @@ def run_wisdem(fname_wt_input, fname_analysis_options, fname_opt_options, fname_
             if spar_cap_ps_options['flag'] and not spar_cap_ps_options['equal_to_suction']:
                 indices  = range(1, spar_cap_ps_options['n_opt'] - 1)
                 wt_opt.model.add_design_var('blade.opt_var.spar_cap_ps_opt_gain', indices = indices, lower=spar_cap_ps_options['min_gain'], upper=spar_cap_ps_options['max_gain'])
-                
-            if opt_options['optimization_variables']['control']['tsr']['flag']:
-                wt_opt.model.add_design_var('opt_var.tsr_opt_gain', lower=opt_options['optimization_variables']['control']['tsr']['min_gain'], upper=opt_options['optimization_variables']['control']['tsr']['max_gain'])
-                
+                                
             if 'dac' in blade_opt_options:
                 if blade_opt_options['dac']['te_flap_end']['flag']:
                     wt_opt.model.add_design_var('blade.opt_var.te_flap_end', lower=blade_opt_options['dac']['te_flap_end']['min_end'], upper=blade_opt_options['dac']['te_flap_end']['max_end'])
@@ -699,4 +696,4 @@ if __name__ == "__main__":
         print('Run time: %f'%(time.time()-tt))
         sys.stdout.flush()
 
-    
+        # print(wt_opt['aeroelastic.C_miners_SC_PS'])
