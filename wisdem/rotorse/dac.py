@@ -258,6 +258,7 @@ class RunXFOIL(ExplicitComponent):
                 from scipy.ndimage import gaussian_filter
             except:
                 print('Cannot import the library gaussian_filter from scipy. Please check the c onda environment and potential conflicts between numpy and scipy')
+            
             for i in range(self.n_span):
                 # Loop through the flaps specified in yaml file
                 for k in range(self.n_te_flaps):
@@ -267,50 +268,69 @@ class RunXFOIL(ExplicitComponent):
                         # Initialize the profile coordinates to zeros
                         self.flap_profiles[i]['coords']     = np.zeros([self.n_xy,2,self.n_tab]) 
                             # Ben:I am not going to force it to include delta=0.  If this is needed, a more complicated way of getting flap deflections to calculate is needed.
-                        flap_angles = np.linspace(inputs['delta_max_neg'][k],inputs['delta_max_pos'][k],self.n_tab) * 180. / np.pi
-                        # Loop through the flap angles
-                        for ind, fa in enumerate(flap_angles):
-                            # NOTE: negative flap angles are deflected to the suction side, i.e. positively along the positive z- (radial) axis
-                            af_flap = CCAirfoil(np.array([1,2,3]), np.array([100]), np.zeros(3), np.zeros(3), np.zeros(3), inputs['coord_xy_interp'][i,:,0], inputs['coord_xy_interp'][i,:,1], "Profile"+str(i)) # bem:I am creating an airfoil name based on index...this structure/naming convention is being assumed in CCAirfoil.runXfoil() via the naming convention used in CCAirfoil.af_flap_coords(). Note that all of the inputs besides profile coordinates and name are just dummy varaiables at this point.
-                            af_flap.af_flap_coords(self.xfoil_path, fa,  inputs['chord_start'][k],0.5,200) #bem: the last number is the number of points in the profile.  It is currently being hard coded at 200 but should be changed to make sure it is the same number of points as the other profiles
-                            # self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords # x-coords from xfoil file with flaps
-                            # self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords # y-coords from xfoil file with flaps
-                            # self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords  # x-coords from xfoil file with flaps and NO gaussian filter for smoothing
-                            # self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords  # y-coords from xfoil file with flaps and NO gaussian filter for smoothing
-                            try:
-                                self.flap_profiles[i]['coords'][:,0,ind] = gaussian_filter(af_flap.af_flap_xcoords, sigma=1) # x-coords from xfoil file with flaps and gaussian filter for smoothing
-                                self.flap_profiles[i]['coords'][:,1,ind] = gaussian_filter(af_flap.af_flap_ycoords, sigma=1) # y-coords from xfoil file with flaps and gaussian filter for smoothing
-                            except:
-                                self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords
-                                self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords
-                            self.flap_profiles[i]['flap_angles'].append([])
-                            self.flap_profiles[i]['flap_angles'][ind] = fa # Putting in flap angles to blade for each profile (can be used for debugging later)
-
-                        # # ** The code below will plot the first three flap deflection profiles (in the case where there are only 3 this will correspond to max negative, zero, and max positive deflection cases)
-                        # font = {'family': 'Times New Roman',
-                        #         'weight': 'normal',
-                        #         'size': 18}
-                        # plt.rc('font', **font)
-                        # plt.figure
-                        # fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-                        # # plt.plot(self.flap_profiles[i]['coords'][:,0,0], self.flap_profiles[i]['coords'][:,1,0], 'r',self.flap_profiles[i]['coords'][:,0,1], self.flap_profiles[i]['coords'][:,1,1], 'k',self.flap_profiles[i]['coords'][:,0,2], self.flap_profiles[i]['coords'][:,1,2], 'b')
-                        # plt.plot(self.flap_profiles[i]['coords'][:, 0, 0],
-                        #         self.flap_profiles[i]['coords'][:, 1, 0], '.r',
-                        #         self.flap_profiles[i]['coords'][:, 0, 2],
-                        #         self.flap_profiles[i]['coords'][:, 1, 2], '.b',
-                        #         self.flap_profiles[i]['coords'][:, 0, 1],
-                        #         self.flap_profiles[i]['coords'][:, 1, 1], '.k')
+                        if inputs['chord_start'][k] > 0: # bem: For actual TE flaps
+                            flap_angles = np.linspace(inputs['delta_max_neg'][k],inputs['delta_max_pos'][k],self.n_tab) * 180. / np.pi
+                            # Loop through the flap angles
+                            for ind, fa in enumerate(flap_angles):
+                                # NOTE: negative flap angles are deflected to the suction side, i.e. positively along the positive z- (radial) axis
+                                af_flap = CCAirfoil(np.array([1,2,3]), np.array([100]), np.zeros(3), np.zeros(3), np.zeros(3), inputs['coord_xy_interp'][i,:,0], inputs['coord_xy_interp'][i,:,1], "Profile"+str(i)) # bem:I am creating an airfoil name based on index...this structure/naming convention is being assumed in CCAirfoil.runXfoil() via the naming convention used in CCAirfoil.af_flap_coords(). Note that all of the inputs besides profile coordinates and name are just dummy varaiables at this point.
+                                af_flap.af_flap_coords(self.xfoil_path, fa,  inputs['chord_start'][k],0.5,200) #bem: the last number is the number of points in the profile.  It is currently being hard coded at 200 but should be changed to make sure it is the same number of points as the other profiles
+                                # self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords # x-coords from xfoil file with flaps
+                                # self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords # y-coords from xfoil file with flaps
+                                # self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords  # x-coords from xfoil file with flaps and NO gaussian filter for smoothing
+                                # self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords  # y-coords from xfoil file with flaps and NO gaussian filter for smoothing
+                                try:
+                                    self.flap_profiles[i]['coords'][:,0,ind] = gaussian_filter(af_flap.af_flap_xcoords, sigma=1) # x-coords from xfoil file with flaps and gaussian filter for smoothing
+                                    self.flap_profiles[i]['coords'][:,1,ind] = gaussian_filter(af_flap.af_flap_ycoords, sigma=1) # y-coords from xfoil file with flaps and gaussian filter for smoothing
+                                except:
+                                    self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords
+                                    self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords
+                                self.flap_profiles[i]['flap_angles'].append([])
+                                self.flap_profiles[i]['flap_angles'][ind] = fa # Putting in flap angles to blade for each profile (can be used for debugging later)
+                        else: # bem: use TE flap input for LE_spoilers or other generic DAC
+                            flap_angles = np.linspace(inputs['delta_max_neg'][k],inputs['delta_max_pos'][k],self.n_tab)
+                            # Loop through the flap angles
+                            for ind, fa in enumerate(flap_angles):
+                                # NOTE: We are simulating LE Spoilers here...these coordinates are just to maintain consistency with flaps...they are not actually used to calculate polars for LE Spoilers at this point
+                                af_flap = CCAirfoil(np.array([1,2,3]), np.array([100]), np.zeros(3), np.zeros(3), np.zeros(3), inputs['coord_xy_interp'][i,:,0], inputs['coord_xy_interp'][i,:,1], "Profile"+str(i)) # bem:I am creating an airfoil name based on index...this structure/naming convention is being assumed in CCAirfoil.runXfoil() via the naming convention used in CCAirfoil.af_flap_coords(). Note that all of the inputs besides profile coordinates and name are just dummy varaiables at this point.
+                                af_flap.af_flap_coords(self.xfoil_path, 0.0, 0.8 ,0.5,200) #bem: the last number is the number of points in the profile.  It is currently being hard coded at 200 but should be changed to make sure it is the same number of points as the other profiles
+                                # self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords # x-coords from xfoil file with flaps
+                                # self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords # y-coords from xfoil file with flaps
+                                # self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords  # x-coords from xfoil file with flaps and NO gaussian filter for smoothing
+                                # self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords  # y-coords from xfoil file with flaps and NO gaussian filter for smoothing
+                                try:
+                                    self.flap_profiles[i]['coords'][:,0,ind] = gaussian_filter(af_flap.af_flap_xcoords, sigma=1) # x-coords from xfoil file with flaps and gaussian filter for smoothing
+                                    self.flap_profiles[i]['coords'][:,1,ind] = gaussian_filter(af_flap.af_flap_ycoords, sigma=1) # y-coords from xfoil file with flaps and gaussian filter for smoothing
+                                except:
+                                    self.flap_profiles[i]['coords'][:,0,ind] = af_flap.af_flap_xcoords
+                                    self.flap_profiles[i]['coords'][:,1,ind] = af_flap.af_flap_ycoords
+                                self.flap_profiles[i]['flap_angles'].append([])
+                                self.flap_profiles[i]['flap_angles'][ind] = fa # Putting in LE Spoiler extension to blade for each profile (can be used for debugging later)
+                            # # ** The code below will plot the first three flap deflection profiles (in the case where there are only 3 this will correspond to max negative, zero, and max positive deflection cases)
+                            # font = {'family': 'Times New Roman',
+                            #         'weight': 'normal',
+                            #         'size': 18}
+                            # plt.rc('font', **font)
+                            # plt.figure
+                            # fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+                            # # plt.plot(self.flap_profiles[i]['coords'][:,0,0], self.flap_profiles[i]['coords'][:,1,0], 'r',self.flap_profiles[i]['coords'][:,0,1], self.flap_profiles[i]['coords'][:,1,1], 'k',self.flap_profiles[i]['coords'][:,0,2], self.flap_profiles[i]['coords'][:,1,2], 'b')
+                            # plt.plot(self.flap_profiles[i]['coords'][:, 0, 0],
+                            #         self.flap_profiles[i]['coords'][:, 1, 0], '.r',
+                            #         self.flap_profiles[i]['coords'][:, 0, 2],
+                            #         self.flap_profiles[i]['coords'][:, 1, 2], '.b',
+                            #         self.flap_profiles[i]['coords'][:, 0, 1],
+                            #         self.flap_profiles[i]['coords'][:, 1, 1], '.k')
                         
-                        # # plt.xlabel('x')
-                        # # plt.ylabel('y')
-                        # plt.axis('equal')
-                        # plt.axis('off')
-                        # plt.tight_layout()
-                        # plt.show()
-                        # # # plt.savefig('temp/airfoil_polars/NACA63-self.618_flap_profiles.png', dpi=300)
-                        # # # plt.savefig('temp/airfoil_polars/FFA-W3-self.211_flap_profiles.png', dpi=300)
-                        # # # plt.savefig('temp/airfoil_polars/FFA-W3-self.241_flap_profiles.png', dpi=300)
-                        # # # plt.savefig('temp/airfoil_polars/FFA-W3-self.301_flap_profiles.png', dpi=300)
+                            # # plt.xlabel('x')
+                            # # plt.ylabel('y')
+                            # plt.axis('equal')
+                            # plt.axis('off')
+                            # plt.tight_layout()
+                            # plt.show()
+                            # # # plt.savefig('temp/airfoil_polars/NACA63-self.618_flap_profiles.png', dpi=300)
+                            # # # plt.savefig('temp/airfoil_polars/FFA-W3-self.211_flap_profiles.png', dpi=300)
+                            # # # plt.savefig('temp/airfoil_polars/FFA-W3-self.241_flap_profiles.png', dpi=300)
+                            # # # plt.savefig('temp/airfoil_polars/FFA-W3-self.301_flap_profiles.png', dpi=300)
 
 
         # ----------------------------------------------------- #
@@ -474,7 +494,7 @@ class RunXFOIL(ExplicitComponent):
 
                     plt.close('all')
         # ------------------------------------------------------------ #
-        # Determine airfoil polar tables for blade sections with flaps #
+        # Determine airfoil polar tables for blade sections with flaps (or generic DAC) #
 
         self.R        = inputs['r'][-1]  # Rotor radius in meters
         self.tsr      = inputs['rated_TSR']  # tip-speed ratio
@@ -507,7 +527,7 @@ class RunXFOIL(ExplicitComponent):
                 run_xfoil_params['maxTS'] = self.maxTS
                 run_xfoil_params['KinVisc'] = self.KinVisc
                 run_xfoil_params['SpdSound'] = self.SpdSound
-                # inputs
+                                # inputs
                 run_xfoil_params['cl_interp'] = inputs['cl_interp']
                 run_xfoil_params['cd_interp'] = inputs['cd_interp']
                 run_xfoil_params['cm_interp'] = inputs['cm_interp']
@@ -515,6 +535,7 @@ class RunXFOIL(ExplicitComponent):
                 run_xfoil_params['s'] = inputs['s']
                 run_xfoil_params['r'] = inputs['r']
                 run_xfoil_params['aoa'] = inputs['aoa']
+                run_xfoil_params['chord_start'] = inputs['chord_start']
 
 
                 # Run XFoil as multiple processors with MPI
@@ -692,6 +713,7 @@ def get_flap_polars(run_xfoil_params, afi):
             fa_control_af[:,ind] = run_xfoil_params['flap_profiles'][afi]['flap_angles'][ind] # flap angle vector of distributed aerodynamics control
             # eta = (blade['pf']['r'][afi]/blade['pf']['r'][-1])
             # eta = blade['outer_shape_bem']['chord']['grid'][afi]
+            cs = run_xfoil_params['chord_start']
             c   = run_xfoil_params['chord'][afi]  # blade chord length at cross section
             s   = run_xfoil_params['s'][afi]
             rR  = run_xfoil_params['r'][afi] / run_xfoil_params['r'][-1]  # non-dimensional blade radial station at cross section in the rotor coordinate system
@@ -714,9 +736,27 @@ def get_flap_polars(run_xfoil_params, afi):
             elif run_xfoil_params['cores'] > 1:
                 xfoil_kw['multi_run'] = True
 
-            data = runXfoil(run_xfoil_params['xfoil_path'], run_xfoil_params['flap_profiles'][afi]['coords'][:, 0, ind],run_xfoil_params['flap_profiles'][afi]['coords'][:, 1, ind],Re_loc_af[0, ind], **xfoil_kw)
+            if cs > 0.0:
+                data = runXfoil(run_xfoil_params['xfoil_path'], run_xfoil_params['flap_profiles'][afi]['coords'][:, 0, ind],run_xfoil_params['flap_profiles'][afi]['coords'][:, 1, ind],Re_loc_af[0, ind], **xfoil_kw)
+            else:
+                # Calculating polar modification parameters for LE Spoilers (this is a rough mapping and could be improved)
+                h = fa_control_af[:,ind] #bem: this only works if there is a single value stored in h...right now, the other dimension of fa_control_af is not being used so this works
+                clmax_ratio = 0.01 * h**2 - 0.1601*h +1.0
+                stall_shift = -0.117*h**2 + 2.0329*h
+                LD_ratio = 0.0127*h**2 - 0.1993*h + 1.0
+                if h <= 1.0:
+                    alpha0_shift = 0.0
+                else:
+                    alpha0_shift = -1.0
+                
+                if h <= 4.0:
+                    S_ratio = 1.0
+                else:
+                    S_ratio = 0.9
+                
+                CD0_shift = 0.002*h
 
-
+                data = general_dac_mod(run_xfoil_params['aoa'],run_xfoil_params['cl_interp'][afi,:,0,0],run_xfoil_params['cd_interp'][afi,:,0,0],run_xfoil_params['cm_interp'][afi,:,0,0],clmax_ratio,stall_shift,LD_ratio,alpha0_shift,S_ratio,CD0_shift,s,fa_control_af[0,ind])
             # data = run_xfoil_params['runXfoil'](run_xfoil_params['flap_profiles'][afi]['coords'][:,0,ind], run_xfoil_params['flap_profiles'][afi]['coords'][:,1,ind], Re[j])
             # data[data[:,0].argsort()] # To sort data by increasing aoa
             # Apply corrections to airfoil polars
@@ -732,7 +772,7 @@ def get_flap_polars(run_xfoil_params, afi):
                 cd_interp_flaps_af[:,j,ind] = np.interp(np.degrees(run_xfoil_params['aoa']), polar.alpha, polar.cd)
                 cm_interp_flaps_af[:,j,ind] = np.interp(np.degrees(run_xfoil_params['aoa']), polar.alpha, polar.cm)
 
-        # # ** The code below will plot the three cl polars
+        # ** The code below will plot the three cl polars
         # import matplotlib.pyplot as plt
         # font = {'family': 'Times New Roman',
         #         'weight': 'normal',
@@ -740,19 +780,55 @@ def get_flap_polars(run_xfoil_params, afi):
         # plt.rc('font', **font)
         # plt.figure
         # fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-        # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,0],'r', label='$\\delta_{flap}$ = -10 deg')  # -10
-        # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,1],'k', label='$\\delta_{flap}$ = 0 deg')  # 0
-        # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,2],'b', label='$\\delta_{flap}$ = +10 deg')  # +10
-        # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,0],'r')  # -10
-        # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,1],'k')  # 0
-        # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,2],'b')  # +10
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[:,0,0],'r', label='h = 0 mm')  # -10
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[:,0,1],'k', label='h = 4.5 mm')  # 0
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[:,0,2],'b', label='h = 9 mm')  # +10
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,0],'r')  # -10
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,1],'k')  # 0
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,2],'b')  # +10
         # plt.xlim(xmin=-15, xmax=15)
         # plt.ylim(ymin=-1.7, ymax=2.2)
         # plt.grid(True)
-        # # autoscale_y(ax)
+        # # # autoscale_y(ax)
         # plt.xlabel('Angles of attack, deg')
         # plt.ylabel('Lift coefficient')
         # plt.legend(loc='lower right')
+        # plt.tight_layout()
+        # plt.show()
+
+        # plt.figure
+        # fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cd_interp_flaps_af[:,0,0],'r', label='h = 0 mm')  # -10
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cd_interp_flaps_af[:,0,1],'k', label='h = 4.5 mm')  # 0
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cd_interp_flaps_af[:,0,2],'b', label='h = 9 mm')  # +10
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,0],'r')  # -10
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,1],'k')  # 0
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,2],'b')  # +10
+        # plt.xlim(xmin=-15, xmax=15)
+        # plt.ylim(ymin=-0.05, ymax=0.3)
+        # plt.grid(True)
+        # # # autoscale_y(ax)
+        # plt.xlabel('Angles of attack, deg')
+        # plt.ylabel('Drag coefficient')
+        # plt.legend(loc='upper right')
+        # plt.tight_layout()
+        # plt.show()
+
+        # plt.figure
+        # fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cm_interp_flaps_af[:,0,0],'r', label='h = 0 mm')  # -10
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cm_interp_flaps_af[:,0,1],'k', label='h = 4.5 mm')  # 0
+        # plt.plot(np.degrees(run_xfoil_params['aoa']), cm_interp_flaps_af[:,0,2],'b', label='h = 9 mm')  # +10
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,0],'r')  # -10
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,1],'k')  # 0
+        # # # plt.plot(np.degrees(run_xfoil_params['aoa']), cl_interp_flaps_af[afi,:,0,2],'b')  # +10
+        # plt.xlim(xmin=-15, xmax=15)
+        # plt.ylim(ymin=-0.1, ymax=0.01)
+        # plt.grid(True)
+        # # # autoscale_y(ax)
+        # plt.xlabel('Angles of attack, deg')
+        # plt.ylabel('Moment coefficient')
+        # plt.legend(loc='upper right')
         # plt.tight_layout()
         # plt.show()
         # # # # plt.savefig('airfoil_polars_check/r_R_1_0_cl_flaps.png', dpi=300)
@@ -781,7 +857,7 @@ def get_flap_polars(run_xfoil_params, afi):
     
     return cl_interp_flaps_af, cd_interp_flaps_af, cm_interp_flaps_af, fa_control_af, Re_loc_af, Ma_loc_af
 
-def general_dac_mod(alpha,cl,cd,cm,clmax_ratio,stall_shift,LD_ratio,alpha0_shift,S_ratio,CD0_shift):
+def general_dac_mod(alpha,cl,cd,cm,clmax_ratio,stall_shift,LD_ratio,alpha0_shift,S_ratio,CD0_shift,s,fa):
     '''
     Models changes to lift, drag, and moment polars to mimic the effects of an active aerodynamic flow device.
 
@@ -819,68 +895,73 @@ def general_dac_mod(alpha,cl,cd,cm,clmax_ratio,stall_shift,LD_ratio,alpha0_shift
     cm_mod: 1D array
         moment coefficient values for modified polars
     '''
+   
     # Initializing variables from unmodified polars
-    da = 0.1                                            # Step size for modified angle of attack values
-    a_ind_ps = find_prestall_range(alpha,cl)            # finds starting and ending indicies for unstalled arifoil conditions
-    A0 = find_alpha0(alpha,cl,a_ind_ps)                 # finds zero lift angle of attack
-    S1 = find_liftcurve_slope(alpha,cl,A0)              # finds lift curve slope
-    ACLmax_ind = a_ind_ps[1]
-    ACLmax = alpha[ACLmax_ind]
-    Clmax = cl[ACLmax_ind]
-    Cdmax = cd[ACLmax_ind]
-    Cmmax = cm[ACLmax_ind]
-    LD = Clmax/Cdmax                                    # calculate max L/D
-    CD0 = find_C0(alpha,cd,A0)
-    CM0 = find_C0(alpha,cm,A0)
-    amax = (Cmmax-CM0)/Clmax                            # shifted moment arm approximation for moment coefficient at maximum lift point
+    n = 100                                                     # Number of angle of attacks in the modified polars
+    a_min_ind, a_max_ind = find_prestall_range(alpha,cl)        # finds starting and ending indicies for unstalled arifoil conditions
+    A0 = find_alpha0(alpha,cl,a_min_ind,a_max_ind)              # finds zero lift angle of attack
+    S1 = find_liftcurve_slope(alpha,cl,A0)                      # finds lift curve slope
+    ACLmax_ind = a_max_ind                                      # Index where max lift occurs
+    ACLmax = alpha[ACLmax_ind]                                  # AoA where maximum lift coefficient occurs
+    Clmax = cl[ACLmax_ind]                                      # Maximum lift coefficient
+    Cdmax = cd[ACLmax_ind]                                      # Maximum drag coefficient
+    Cmmax = cm[ACLmax_ind]                                      # Moment coefficient at max lift                                    
+    CD0 = find_C0(alpha,cd,A0)                                  # Drag coefficient at zero-lift angle of attack
+    CM0 = find_C0(alpha,cm,A0)                                  # Moment coefficient at zero-lift angle of attack
+    amax = (Cmmax-CM0)/Clmax                                    # shifted moment arm approximation for moment coefficient at maximum lift point
 
     # Modifying variables according to input parameters
-    A0 -= alpha0_shift
+    A0 -= alpha0_shift*np.pi/180.0
     S1 *= S_ratio
     CD0 += CD0_shift
     Clmax *= clmax_ratio
-    ACLmax -= (stall_shift + alpha0_shift)
-    LD *= LD_ratio
+    ACLmax -= (stall_shift + alpha0_shift)*np.pi/180.0
+    LD = Clmax/Cdmax                                            # calculate max L/D
+    LD *= LD_ratio                          
     Cdmax_2 = Clmax/LD
 
-    CD2max = 1.5                                        # assumed value for max Cd post stall (blunt body drag coefficient)
-    M = 2.0
-    n = ((a_ind_ps[1] + 3.0)-(a_ind_ps[0] - 3.0))/da+1  # Number of angles of attack
+    CD2max = 1.5                                                # assumed value for max Cd post stall (blunt body drag coefficient)
+    M = 2.0                                                     # power of of drag coefficient in linear range (assumed quadratic relationship)
+    ext = 3.0                                                   # Amount to extent beyond possitive/negative stall
+    da = ((ACLmax + ext*np.pi/180.0)-(-(ACLmax-A0) - ext*np.pi/180.0))/(float(n)-1.0)   # Calculate AoA step-size
 
     # Initializing output matricies
-    a_mod = np.zeros(n)
-    cl_mod = np.zeros(n)
-    cd_mod = np.zeros(n)
-    cm_mod = np.zeros(n)
+    mod_polar = np.zeros((n,5))
 
     # Calculating modified lift, drag, and moment coefficients
     RCL = S1*(ACLmax - A0) - Clmax
     N1 = 1 + Clmax/RCL
 
 
-    for j in range(a_mod):
-        a_mod[j] = a_ind_ps[0] - 3.0 + j*da
+    for j in range(n):
+        # Calculate Angle of Attack (in radians)
+        mod_polar[j,0] = -(ACLmax-A0) - ext*np.pi/180.0 + j*da      # Note the ext variable extends the range of angle of attacks being used by that much beyond the stall angle
 
-        if a_mod[j] < A0:
-            cl_mod[j] = S1*(a_mod[j]-A0) + RCL*((A0-a_mod[j])/(ACLmax-A0))**N1
+        # Calculate Lift Coefficient
+        if mod_polar[j,0] < A0:
+            mod_polar[j,1] = S1*(mod_polar[j,0]-A0) + RCL*((A0-mod_polar[j,0])/(ACLmax-A0))**N1
         else:
-            cl_mod[j] = S1*(a_mod[j]-A0) - RCL*((a_mod[j]-A0)/(ACLmax-A0))**N1
+            mod_polar[j,1] = S1*(mod_polar[j,0]-A0) - RCL*((mod_polar[j,0]-A0)/(ACLmax-A0))**N1     # Assumed to be symmetric about A0
 
-        if a_mod[j] < (2*A0-ACLmax):
-            cd_mod[j] = Cdmax_2 + (CD2max - Cdmax_2)*np.sin(((2*A0-a_mod[j])-ACLmax)/(90.-ACLmax)*np.pi/2.)
-        elif a_mod[j] >= (2*A0-ACLmax)  and a_mod[j] <= ACLmax:
-            cd_mod[j] = CD0 + (Cdmax_2-CD0)*((a_mod[j]-A0)/(ACLmax-A0))**M
+        # Calculate Drag Coefficient    
+        if mod_polar[j,0] < (2*A0-ACLmax):
+            mod_polar[j,2] = Cdmax_2 + (CD2max - Cdmax_2)*np.sin(((2*A0-mod_polar[j,0])-ACLmax)/(np.pi/2.0-ACLmax)*np.pi/2.0)
+        elif mod_polar[j,0] >= (2*A0-ACLmax)  and mod_polar[j,0] <= ACLmax:
+            mod_polar[j,2] = CD0 + (Cdmax_2-CD0)*((mod_polar[j,0]-A0)/(ACLmax-A0))**M       # In linear range, drag is quadratic
         else:
-            cd_mod[j] = Cdmax_2 + (CD2max - Cdmax_2)*np.sin((a_mod[j]-ACLmax)/(90.-ACLmax)*np.pi/2.) 
+            mod_polar[j,2] = Cdmax_2 + (CD2max - Cdmax_2)*np.sin((mod_polar[j,0]-ACLmax)/(np.pi/2.0-ACLmax)*np.pi/2.0) 
         
-        a = amax*(a_mod[j]-A0)/(ACLmax-A0)
-        cm_mod[j] = a*cl_mod[j] + CM0 - alpha0_shift*S1/8.
+        # Calculate Moment Coefficient
+        a_arm = amax*(mod_polar[j,0]-A0)/(ACLmax-A0)
+        mod_polar[j,4] = a_arm*mod_polar[j,1] + CM0 - alpha0_shift*np.pi/180.0*S1/8.  # Note that moment coefficient is intentionally placed in index 4 column (skipped a column) to maintain consistency with xfoil output format
 
-    return a_mod, cl_mod, cd_mod, cm_mod 
+    mod_polar[:,0] = np.degrees(mod_polar[:,0])             # Convert output AoA to degrees for consistency with xfoil output
+
+    return mod_polar
 
 def find_prestall_range(alpha,cl):
     '''
-    Searches lift polar to find indicies where postive and negative stall occur (ignores deep stall and extrapolated data beyone natural stall points of most airfoils)
+    Searches lift polar to find indicies where postive and negative stall occur (ignores deep stall and extrapolated data beyond natural stall points of most airfoils)
 
     Parameters:
     -----------
@@ -896,23 +977,28 @@ def find_prestall_range(alpha,cl):
     a_max_ind: int
         Index where maximum lift occurs (near positive stall point)
     '''
-    for ind in range(alpha):
-        if alpha[ind]>=-25. and alpha[ind]<=25.:                                    # Reasonable range of AoA for pre-stall range for most airfoils
+    for ind in range(len(alpha)):
+        if alpha[ind]>=-25.0* np.pi/180.0 and alpha[ind]<=25.*np.pi/180.0:          # Reasonable range of AoA for pre-stall range for most airfoils
             if ind != 0 and ind != len(alpha)-1:                                    # Avoiding end points (need to look at slopes to find maxima/minima)
                 if (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.:      # Finding minimum lift for negative stall
                     a_min_ind = ind
-                elif (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.:    # Finding maximum lift for positive stall
+                    print('1')
+                elif (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]>0.:     # Finding maximum lift for positive stall
                     a_max_ind = ind
+                    print('2')
+                    
             elif ind == 0:                                                          # Dealing with possibility of negative stall not captured
-                if cl[ind] <= cl[ind+1]:
+                if cl[ind] <= cl[ind+1] and a_min_ind == []:
                     a_min_ind = ind
+                    print('3')
             else:                                                                   # Dealing with possibility where positive stall is not captured
-                if cl[ind-1] <= cl[ind]:
+                if cl[ind-1] <= cl[ind] and a_max_ind == []:
                     a_max_ind = ind
+                    print('4')
     
     return a_min_ind, a_max_ind
 
-def find_alpha0(alpha,cl,a_ind_range):
+def find_alpha0(alpha,cl,a_min_ind,a_max_ind):
     '''
     Searches lift polar over specified range of angle of attack (pre-stall range) to find value of zero-lift angle of attack through interpolation of lift polar
 
@@ -922,18 +1008,21 @@ def find_alpha0(alpha,cl,a_ind_range):
         Values of angle of attack (AoA) for polar
     cl: 1D array
         Values of lift coefficient for polars
-    a_ind_range: 1D array
-        Array with 2 values: index for lower bound of search, index for upper bound of search
+    a_min_ind: int
+        Index for lower bound of search
+    a_max_ind: int
+        Index for upper bound of search
 
     Returns:
     --------
     alpha0: float
         Value of zero-lift angle of attack
     '''
-    for ind in range(alpha):
-        if ind >= a_ind_range[0] and ind <=a_ind_range[1]:
+    for ind in range(len(alpha)-1):
+        if ind >= a_min_ind and ind <=a_max_ind:
             if cl[ind]<=0. and cl[ind+1]>0.:                                                    # Finding where lift transitions form negative to positive
                 alpha0 = (-alpha[ind+1]+alpha[ind])/(cl[ind+1]-cl[ind])*(cl[ind])+alpha[ind]    # Linear interpolation between two points
+                break
 
     return alpha0
 
@@ -955,11 +1044,11 @@ def find_liftcurve_slope(alpha,cl,alpha0 = 0.):
     slope: float
         lift curve slope
     '''
-    for ind in range(alpha):
-        if alpha[ind] <= alpha0-3. and alpha[ind+1] >= alpha0-3.:       # Lower bound for slop approximately 3 deg below zero-lift AoA
+    for ind in range(len(alpha)):
+        if alpha[ind] <= alpha0-3.0*np.pi/180.0 and alpha[ind+1] >= alpha0-3.0*np.pi/180.0:       # Lower bound for slop approximately 3 deg below zero-lift AoA
             a_min = alpha[ind]
             cl_min = cl[ind]
-        elif alpha[ind] <= alpha0+3. and alpha[ind+1] >= alpha0+3.:     # Upper bound for slop approximately 3 deg above zero-lift AoA
+        elif alpha[ind] <= alpha0+3.0*np.pi/180.0 and alpha[ind+1] >= alpha0+3.0*np.pi/180.0:     # Upper bound for slop approximately 3 deg above zero-lift AoA
             a_max = alpha[ind]
             cl_max = cl[ind]
             break
@@ -986,7 +1075,7 @@ def find_C0(alpha,c,alpha0 = 0.):
     C0: float
         Interpolated value of coefficient
     '''
-    for ind in range(alpha):
+    for ind in range(len(alpha)):
         if alpha[ind] <= alpha0 and alpha[ind+1] >= alpha0:                                 # Finds location of segment to be interpolated between
             C0 = (c[ind+1]-c[ind])/(alpha[ind+1]-alpha[ind])*(alpha0-alpha[ind])+c[ind]     # Linear interpolation
             break

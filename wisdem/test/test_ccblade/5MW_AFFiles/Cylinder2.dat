@@ -1,0 +1,8 @@
+Round root section with a Cd of 0.35
+   1        Number of airfoil tables in this file
+   1.0     Reynolds numbers in millions
+-180.00    0.000   0.3500   0.000
+   0.00    0.000   0.3500   0.000
+ 180.00    0.000   0.3500   0.000
+EOT
+
