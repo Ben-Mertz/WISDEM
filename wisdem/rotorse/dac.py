@@ -982,19 +982,19 @@ def find_prestall_range(alpha,cl):
             if ind != 0 and ind != len(alpha)-1:                                    # Avoiding end points (need to look at slopes to find maxima/minima)
                 if (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]<=0.:      # Finding minimum lift for negative stall
                     a_min_ind = ind
-                    print('1')
+                    #print('1')
                 elif (cl[ind-1]-cl[ind])*(cl[ind]-cl[ind+1])<0. and cl[ind]>0.:     # Finding maximum lift for positive stall
                     a_max_ind = ind
-                    print('2')
+                    #print('2')
                     
             elif ind == 0:                                                          # Dealing with possibility of negative stall not captured
                 if cl[ind] <= cl[ind+1] and a_min_ind == []:
                     a_min_ind = ind
-                    print('3')
+                    #print('3')
             else:                                                                   # Dealing with possibility where positive stall is not captured
                 if cl[ind-1] <= cl[ind] and a_max_ind == []:
                     a_max_ind = ind
-                    print('4')
+                    #print('4')
     
     return a_min_ind, a_max_ind
 
