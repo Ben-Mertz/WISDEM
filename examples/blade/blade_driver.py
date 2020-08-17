@@ -11,10 +11,8 @@ fname_wt_input         = mydir + os.sep + 'blade.yaml'
 fname_modeling_options = mydir + os.sep + 'modeling_options.yaml'
 fname_analysis_options = mydir + os.sep + 'analysis_options_blade.yaml'
 fname_analysis_no_opt  = mydir + os.sep + 'analysis_options_blade_no_opt.yaml'
-folder_output          = mydir + os.sep + 'output' + os.sep
-fname_wt_output        = folder_output + 'blade_optimized.yaml'
 
-wt_opt1, analysis_options1, opt_options1 = run_wisdem(fname_wt_input, fname_modeling_options, fname_analysis_options, fname_wt_output, folder_output)
+wt_opt1, analysis_options1, opt_options1 = run_wisdem(fname_wt_input, fname_modeling_options, fname_analysis_options)
 
 # Printing and plotting results
 print('AEP in GWh = ' + str(wt_opt1['sse.AEP']*1.e-6))
@@ -29,7 +27,9 @@ print('6P in Hz = ' + str(wt_opt1['sse.powercurve.rated_Omega']/60.*6.))
 print('Tip tower clearance in m     = ' + str(wt_opt1['tcons.blade_tip_tower_clearance']))
 print('Tip deflection constraint    = ' + str(wt_opt1['tcons.tip_deflection_ratio']))
 
-wt_opt2, analysis_options2, opt_options2 = run_wisdem(fname_wt_output, fname_modeling_options, fname_analysis_no_opt, fname_wt_output, folder_output)
+folder_output = opt_options1['general']['folder_output']
+fname_wt_output = os.path.join(folder_output, opt_options1['general']['fname_output']+'.yaml')
+wt_opt2, analysis_options2, opt_options2 = run_wisdem(fname_wt_output, fname_modeling_options, fname_analysis_no_opt)
 
 label1 = 'Orig'
 label2 = 'Optimized'
@@ -49,7 +49,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'twist_opt' + extension
-ftw.savefig(folder_output + fig_name)
+ftw.savefig(os.path.join(folder_output, fig_name))
 
 # Chord
 fc, axc = plt.subplots(1,1,figsize=(5.3, 4))
@@ -63,7 +63,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'chord' + extension
-fc.savefig(folder_output + fig_name)
+fc.savefig(os.path.join(folder_output, fig_name))
 
 # rthick
 fc, axc = plt.subplots(1,1,figsize=(5.3, 4))
@@ -77,7 +77,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'rthick' + extension
-fc.savefig(folder_output + fig_name)
+fc.savefig(os.path.join(folder_output, fig_name))
 
 # Edgewise stiffness
 f, ax = plt.subplots(1,1,figsize=(5.3, 4))
@@ -91,7 +91,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'edge' + extension
-f.savefig(folder_output + fig_name)
+f.savefig(os.path.join(folder_output, fig_name))
 
 # Stiffness
 f, ax = plt.subplots(1,1,figsize=(5.3, 4))
@@ -105,7 +105,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'flap' + extension
-f.savefig(folder_output + fig_name)
+f.savefig(os.path.join(folder_output, fig_name))
 
 # Torsional stiffness
 f, ax = plt.subplots(1,1,figsize=(5.3, 4))
@@ -119,7 +119,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'gj' + extension
-f.savefig(folder_output + fig_name)
+f.savefig(os.path.join(folder_output, fig_name))
 
 # Mass
 f, ax = plt.subplots(1,1,figsize=(5.3, 4))
@@ -133,7 +133,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'mass' + extension
-f.savefig(folder_output + fig_name)
+f.savefig(os.path.join(folder_output, fig_name))
 
 # Angle of attack and stall angle
 faoa, axaoa = plt.subplots(1,1,figsize=(5.3, 4))
@@ -149,7 +149,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'aoa' + extension
-faoa.savefig(folder_output + fig_name)
+faoa.savefig(os.path.join(folder_output, fig_name))
 
 # Induction
 fa, axa = plt.subplots(1,1,figsize=(5.3, 4))
@@ -164,7 +164,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'induction' + extension
-fa.savefig(folder_output + fig_name)
+fa.savefig(os.path.join(folder_output, fig_name))
 
 # Lift coefficient
 fcl, axcl = plt.subplots(1,1,figsize=(5.3, 4))
@@ -178,7 +178,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'lift_coeff' + extension
-fcl.savefig(folder_output + fig_name)
+fcl.savefig(os.path.join(folder_output, fig_name))
 
 # Airfoil efficiency
 feff, axeff = plt.subplots(1,1,figsize=(5.3, 4))
@@ -192,7 +192,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'af_efficiency' + extension
-feff.savefig(folder_output + fig_name)
+feff.savefig(os.path.join(folder_output, fig_name))
 
 # Spar caps
 fsc, axsc = plt.subplots(1,1,figsize=(5.3, 4))
@@ -212,7 +212,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.15)
 fig_name = 'sc_opt' + extension
-fsc.savefig(folder_output + fig_name)
+fsc.savefig(os.path.join(folder_output, fig_name))
 
 # Strains spar caps
 feps, axeps = plt.subplots(1,1,figsize=(5.3, 4))
@@ -231,7 +231,7 @@ plt.yticks(fontsize=fs)
 plt.grid(color=[0.8,0.8,0.8], linestyle='--')
 plt.subplots_adjust(bottom = 0.15, left = 0.2)
 fig_name = 'strains_opt' + extension
-feps.savefig(folder_output + fig_name)
+feps.savefig(os.path.join(folder_output, fig_name))
 
 if show_plots:
     plt.show()
