@@ -41,7 +41,7 @@ dependencies:
   - sphinx-copybutton
   - sphinx-jsonschema
   - sphinx_rtd_theme>=1.3
-  - windIO>=2.1.1
+  - windio>=2.1.1
   - wombat>=0.13.1
   - pip:
     - dearpygui
