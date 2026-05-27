@@ -456,7 +456,7 @@ class GearedLayout(Layout):
     Parameters
     ----------
     hss_diameter : numpy array[2], [m]
-        HSS outer diameter from hub to bearing 2
+        HSS outer diameter from gearbox to generator
     hss_wall_thickness : numpy array[2], [m]
         HSS wall thickness
     bedplate_flange_width : float, [m]
@@ -582,7 +582,7 @@ class GearedLayout(Layout):
 
         # ------- hss, lss, and bearing properties ----------------
         # Compute center of mass based on area
-        m_hss, cm_hss, I_hss, _, _ = rod_prop(s_hss, D_hss, t_hss, hss_rho)
+        m_hss, cm_hss, I_hss, _, _ = rod_prop(s_hss, np.flip(D_hss), np.flip(t_hss), hss_rho)
         if hss_mass_user > 0.0:
             m_hss = hss_mass_user
         outputs["hss_mass"] = m_hss
@@ -590,7 +590,7 @@ class GearedLayout(Layout):
         outputs["hss_I"] = I_hss
         outputs["s_hss"] = s_hss
 
-        m_lss, cm_lss, I_lss, Ds_lss, ts_lss = rod_prop(s_lss, D_lss, t_lss, lss_rho)
+        m_lss, cm_lss, I_lss, Ds_lss, ts_lss = rod_prop(s_lss, np.flip(D_lss), np.flip(t_lss), lss_rho)
         if lss_mass_user > 0.0:
             m_lss = lss_mass_user
         outputs["lss_mass"] = m_lss
