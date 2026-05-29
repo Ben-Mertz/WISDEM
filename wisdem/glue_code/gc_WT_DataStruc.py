@@ -1250,6 +1250,7 @@ class Place_Webs_Caps(om.ExplicitComponent):
         self.n_webs = n_webs = rotorse_options["n_webs"]
         self.n_layers = n_layers = rotorse_options["n_layers"]
         self.n_xy = n_xy = rotorse_options["n_xy"]  # Number of coordinate points to describe the airfoil geometry
+        self.place_webs_caps = rotorse_options["place_webs_caps"]
 
         # self.add_input(
         #     "chord", val=np.zeros(n_span), units="m", desc="1D array of the chord values defined along blade span."
@@ -1272,6 +1273,12 @@ class Place_Webs_Caps(om.ExplicitComponent):
             val=np.zeros((n_webs, n_span)),
             units="m",
             desc="2D array of the dimensional offset of a web with respect to the reference axis. The first dimension represents each web, the second dimension represents each entry along blade span.",
+        )
+        self.add_input(
+            "layer_offset",
+            val=np.zeros((n_layers, n_span)),
+            units="m",
+            desc="2D array of the dimensional offset of a layer with respect to the reference axis. The first dimension represents each layer, the second dimension represents each entry along blade span.",
         )
         self.add_discrete_input(
             "build_layer",
@@ -1312,103 +1319,107 @@ class Place_Webs_Caps(om.ExplicitComponent):
         )
 
     def compute(self, inputs, outputs, discrete_inputs, discrete_outputs):
-        start = 0.1
-        end = 0.9
-        id = [np.argmin(np.abs(inputs["s"] - start)), np.argmin(np.abs(inputs["s"] - end))]
+        if self.place_webs_caps:
+            start = 0.1
+            end = 0.9
+            id = [np.argmin(np.abs(inputs["s"] - start)), np.argmin(np.abs(inputs["s"] - end))]
 
-        x_tmax = np.zeros(2)
+            x_tmax = np.zeros(2)
 
-        # get coordinates of the two profiles at 10% and 90% span and find the x location of max thickness for each of the two profiles
-        for i in range(2):
-            x = inputs["coord_xy_dim"][id[i], :, 0]
-            y = inputs["coord_xy_dim"][id[i], :, 1]
-            # find LE and chord
-            i_le = np.argmin(x)
-            x_le = x[i_le]
-            x_te = np.max(x) # robust TE x
-            chord = x_te - x_le
-            # Split profile into the two sides at LE
-            x1, y1 = x[:i_le+1], y[:i_le+1]
-            x2, y2 = x[i_le:], y[i_le:] 
-            # Make both sides increasing in x for interpolation
-            if x1[0] > x1[-1]:
-                x1, y1 = x1[::-1], y1[::-1]
-            if x2[0] > x2[-1]:
-                x2, y2 = x2[::-1], y2[::-1]
-            # Common x-range where both sides exist
-            x_min = max(x1.min(), x2.min())
-            x_max = min(x1.max(), x2.max())
-            xq = np.linspace(x_min, x_max, int(1e+3))
+            # get coordinates of the two profiles at 10% and 90% span and find the x location of max thickness for each of the two profiles
+            for i in range(2):
+                x = inputs["coord_xy_dim"][id[i], :, 0]
+                y = inputs["coord_xy_dim"][id[i], :, 1]
+                # find LE and chord
+                i_le = np.argmin(x)
+                x_le = x[i_le]
+                x_te = np.max(x) # robust TE x
+                chord = x_te - x_le
+                # Split profile into the two sides at LE
+                x1, y1 = x[:i_le+1], y[:i_le+1]
+                x2, y2 = x[i_le:], y[i_le:] 
+                # Make both sides increasing in x for interpolation
+                if x1[0] > x1[-1]:
+                    x1, y1 = x1[::-1], y1[::-1]
+                if x2[0] > x2[-1]:
+                    x2, y2 = x2[::-1], y2[::-1]
+                # Common x-range where both sides exist
+                x_min = max(x1.min(), x2.min())
+                x_max = min(x1.max(), x2.max())
+                xq = np.linspace(x_min, x_max, int(1e+3))
 
-            y1q = np.interp(xq, x1, y1)
-            y2q = np.interp(xq, x2, y2)
+                y1q = np.interp(xq, x1, y1)
+                y2q = np.interp(xq, x2, y2)
 
-            thickness = np.abs(y1q - y2q)
-            i_tmax = np.argmax(thickness)
+                thickness = np.abs(y1q - y2q)
+                i_tmax = np.argmax(thickness)
 
-            # t_max = thickness[i_tmax] # max thickness [m]
-            x_tmax[i] = xq[i_tmax] # x-location [m]
+                # t_max = thickness[i_tmax] # max thickness [m]
+                x_tmax[i] = xq[i_tmax] # x-location [m]
 
-        # Interpolate with constant slope extrapolation outside [0.1, 0.9]
-        s_ref = inputs["s"][id]
-        slope = (x_tmax[1] - x_tmax[0]) / (s_ref[1] - s_ref[0])
-        x_tmax_interp = np.interp(inputs["s"], s_ref, x_tmax)
-        
-        # Apply constant slope extrapolation
-        mask_below = inputs["s"] < s_ref[0]
-        mask_above = inputs["s"] > s_ref[1]
-        x_tmax_interp[mask_below] = x_tmax[0] + slope * (inputs["s"][mask_below] - s_ref[0])
-        x_tmax_interp[mask_above] = x_tmax[1] + slope * (inputs["s"][mask_above] - s_ref[1])
-
-        # Start placement logic
-        webs_do_not_fit = True
-        le_coord = inputs["coord_xy_dim"][:, :, 0].min(axis=1)
-        te_coord = inputs["coord_xy_dim"][:, :, 0].max(axis=1)
-        # Compute distance between the webs
-        distance_webs = np.abs([inputs["web_offset"][1, id[0]] - inputs["web_offset"][0, id[0]], inputs["web_offset"][1, id[1]] - inputs["web_offset"][0, id[1]]])
-        while webs_do_not_fit:
-            slope = (distance_webs[1] - distance_webs[0]) / (s_ref[1] - s_ref[0])
-            distance_webs_interp = np.interp(inputs["s"], s_ref, distance_webs)
+            # Interpolate with constant slope extrapolation outside [0.1, 0.9]
+            s_ref = inputs["s"][id]
+            slope = (x_tmax[1] - x_tmax[0]) / (s_ref[1] - s_ref[0])
+            x_tmax_interp = np.interp(inputs["s"], s_ref, x_tmax)
             
             # Apply constant slope extrapolation
-            distance_webs_interp[mask_below] = distance_webs[0] + slope * (inputs["s"][mask_below] - s_ref[0])
-            distance_webs_interp[mask_above] = distance_webs[1] + slope * (inputs["s"][mask_above] - s_ref[1])
+            mask_below = inputs["s"] < s_ref[0]
+            mask_above = inputs["s"] > s_ref[1]
+            x_tmax_interp[mask_below] = x_tmax[0] + slope * (inputs["s"][mask_below] - s_ref[0])
+            x_tmax_interp[mask_above] = x_tmax[1] + slope * (inputs["s"][mask_above] - s_ref[1])
 
-            for j in range(self.n_webs):
-                if discrete_inputs["build_web"][j]:
-                    outputs["web_offset_adjusted"][j, :] = x_tmax_interp - distance_webs_interp / 2 + j * distance_webs_interp / (self.n_webs - 1)
+            # Start placement logic
+            webs_do_not_fit = True
+            le_coord = inputs["coord_xy_dim"][:, :, 0].min(axis=1)
+            te_coord = inputs["coord_xy_dim"][:, :, 0].max(axis=1)
+            # Compute distance between the webs
+            distance_webs = np.abs([inputs["web_offset"][1, id[0]] - inputs["web_offset"][0, id[0]], inputs["web_offset"][1, id[1]] - inputs["web_offset"][0, id[1]]])
+            while webs_do_not_fit:
+                slope = (distance_webs[1] - distance_webs[0]) / (s_ref[1] - s_ref[0])
+                distance_webs_interp = np.interp(inputs["s"], s_ref, distance_webs)
+                
+                # Apply constant slope extrapolation
+                distance_webs_interp[mask_below] = distance_webs[0] + slope * (inputs["s"][mask_below] - s_ref[0])
+                distance_webs_interp[mask_above] = distance_webs[1] + slope * (inputs["s"][mask_above] - s_ref[1])
 
-            # Check the webs fit within the blade profile with a 5% chord margin from the leading and trailing edge. If not, reduce the distance between the webs and repeat until they fit.
-            if all(all(outputs["web_offset_adjusted"][j, :] > le_coord + 0.05*chord) for j in range(self.n_webs)) and all(all(outputs["web_offset_adjusted"][j, :] < te_coord - 0.05*chord) for j in range(self.n_webs)):
-                webs_do_not_fit = False
-            if webs_do_not_fit:
-                distance_webs *= 0.9
-            if any(distance_webs) < 0.:
-                logger.debug("The distance between the webs has been reduced to less than 0 and it still does not fit within the blade profile. Please adjust the input parameters.")
-                webs_do_not_fit = False
-        
-        outputs["layer_width_adjusted"] = inputs["layer_width"]
-        for j in range(self.n_layers):
-            if discrete_inputs["build_layer"][j] in [1, 2]: # from offset and rotation
-                outputs["layer_offset_adjusted"][j, :] = x_tmax_interp
+                for j in range(self.n_webs):
+                    if discrete_inputs["build_web"][j]:
+                        outputs["web_offset_adjusted"][j, :] = x_tmax_interp - distance_webs_interp / 2 + j * distance_webs_interp / (self.n_webs - 1)
 
-                # Check the layers fit within the blade profile with a 5% chord margin from the leading and trailing edge. If not, reduce the width to 50% of chord
-                for i in range(self.n_span):
-                    caps_fit = True
-                    k = 1
-                    chord = te_coord[i] - le_coord[i]
-                    while caps_fit:
-                        k *=0.9
-                        if outputs["layer_offset_adjusted"][j, i] - 0.5 * outputs["layer_width_adjusted"][j, i] < le_coord[i] + 0.05*chord:
-                            outputs["layer_width_adjusted"][j, i] = k*chord
-                            caps_fit = False
-                        elif outputs["layer_offset_adjusted"][j, i] + 0.5 * outputs["layer_width_adjusted"][j, i] > te_coord[i] - 0.05*chord:
-                            outputs["layer_width_adjusted"][j, i] = k*chord
-                            caps_fit = False
-                        if k < 0.1:
-                            logger.debug("The layer width of the spar caps has been reduced to less than 10pc of the chord and it still does not fit within the blade profile. Please adjust the input parameters.")
-                            break
+                # Check the webs fit within the blade profile with a 5% chord margin from the leading and trailing edge. If not, reduce the distance between the webs and repeat until they fit.
+                if all(all(outputs["web_offset_adjusted"][j, :] > le_coord + 0.05*chord) for j in range(self.n_webs)) and all(all(outputs["web_offset_adjusted"][j, :] < te_coord - 0.05*chord) for j in range(self.n_webs)):
+                    webs_do_not_fit = False
+                if webs_do_not_fit:
+                    distance_webs *= 0.9
+                if any(distance_webs) < 0.:
+                    logger.debug("The distance between the webs has been reduced to less than 0 and it still does not fit within the blade profile. Please adjust the input parameters.")
+                    webs_do_not_fit = False
+            
+            outputs["layer_width_adjusted"] = inputs["layer_width"]
+            for j in range(self.n_layers):
+                if discrete_inputs["build_layer"][j] in [1, 2]: # from offset and rotation
+                    outputs["layer_offset_adjusted"][j, :] = x_tmax_interp
 
+                    # Check the layers fit within the blade profile with a 5% chord margin from the leading and trailing edge. If not, reduce the width to 50% of chord
+                    for i in range(self.n_span):
+                        caps_fit = True
+                        k = 1
+                        chord = te_coord[i] - le_coord[i]
+                        while caps_fit:
+                            k *=0.9
+                            if outputs["layer_offset_adjusted"][j, i] - 0.5 * outputs["layer_width_adjusted"][j, i] < le_coord[i] + 0.05*chord:
+                                outputs["layer_width_adjusted"][j, i] = k*chord
+                                caps_fit = False
+                            elif outputs["layer_offset_adjusted"][j, i] + 0.5 * outputs["layer_width_adjusted"][j, i] > te_coord[i] - 0.05*chord:
+                                outputs["layer_width_adjusted"][j, i] = k*chord
+                                caps_fit = False
+                            if k < 0.1:
+                                logger.debug("The layer width of the spar caps has been reduced to less than 10pc of the chord and it still does not fit within the blade profile. Please adjust the input parameters.")
+                                break
+        else:
+            outputs["web_offset_adjusted"] = inputs["web_offset"]
+            outputs["layer_offset_adjusted"] = inputs["layer_offset"]
+            outputs["layer_width_adjusted"] = inputs["layer_width"]
 
 class Compute_Blade_Structure(om.ExplicitComponent):
     def initialize(self):

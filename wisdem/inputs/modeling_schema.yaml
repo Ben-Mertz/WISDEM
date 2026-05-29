@@ -161,6 +161,10 @@ properties:
                         type: boolean
                         default: True
                         description: Flag switching on and off the 3d DU-Selig airfoil correction implemented in Polar.py
+                    place_webs_caps:
+                        type: boolean
+                        default: False
+                        description: Whether or not to optimize the placement of the webs and caps in the blade for along maximum chordwise thickness.
             DriveSE:
                 type: object
                 default: {}
