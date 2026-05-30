@@ -137,6 +137,7 @@ class TestBC(unittest.TestCase):
         wt_initial = WindTurbineOntologyPython(fname_wt_input, fname_modeling_options, fname_opt_options)
         wt_init, modeling_options, opt_options = wt_initial.get_input_data()
         modeling_options["WISDEM"]["RotorSE"]["flag"] = False
+        modeling_options["WISDEM"]["RotorSE"]["place_webs_caps"] = False
         modeling_options["WISDEM"]["DriveSE"]["flag"] = False
         modeling_options["WISDEM"]["TowerSE"]["flag"] = False
         modeling_options["flags"]["blade"] = True
