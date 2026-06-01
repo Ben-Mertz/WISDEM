@@ -28,7 +28,7 @@ dependencies:
   - sortedcontainers
   - statsmodels>=0.14.5
   - pip
-  - windIO>=2.1.1
+  - windio>=2.1.1
   - wombat>=0.13.1
   - pip:
     - dearpygui
