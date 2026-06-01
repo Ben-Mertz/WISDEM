@@ -8,6 +8,7 @@ WISDEM:
         spar_cap_ps: Spar_cap_ps
         te_ss: TE_reinf_ss
         te_ps: TE_reinf_ps
+        place_webs_caps: True
     DriveSE:
         flag: True
     TowerSE:             # Options of TowerSE module

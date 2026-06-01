@@ -7,6 +7,7 @@ This example walks through a blade optimization problem with increasing complexi
 
 All of the iterations use the same geometry input file, ``BAR-USC.yaml``, which describes a baseline design from the NREL-Sandia Big Adaptive Rotor (BAR) project described in this GitHub [repository](https://github.com/NREL/BAR_Designs).
 This blade uses carbon fiber-reinforced polymer in the spar cap design.  The same ``modeling_options.yaml`` file is also common to all iterations and shows that all WISDEM modules are called. The file has dozens of optional inputs hidden. The full list of inputs is available among the :ref:`modeling-options`.
+Note only one important new flag: `place_webs_caps` is activated in the modeling options for this example, which allows the optimizer to adjust the placement of the spar caps, the layers linked to those, and shear webs to be placed chordwise along the maximum thickness of the blade. This is a new feature that can be used in any optimization problem, but it is only activated in this example for demonstration purposes.
 The example file runs four cases one after the other for testing purposes. To run the cases one by one, make sure to comment out all cases at lines 15-18 except the case that should run.
 
 
