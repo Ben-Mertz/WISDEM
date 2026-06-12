@@ -538,8 +538,9 @@ class TestNLoptDriver(unittest.TestCase):
         prob.driver.options["optimizer"] = "LD_SLSQP"
         prob.driver.options["tol"] = 1e-9
 
-        model.add_design_var("x", lower=-50.0, upper=50.0, ref=0.02)
-        model.add_design_var("y", lower=-50.0, upper=50.0, ref=0.02)
+        # GB: Something changed in OMDAO v3.44 and only ref values >=1 work here
+        model.add_design_var("x", lower=-50.0, upper=50.0, ref=1.0)
+        model.add_design_var("y", lower=-50.0, upper=50.0, ref=1.0)
         model.add_objective("f_xy")
         model.add_constraint("c", lower=10.0, upper=11.0)
 
@@ -564,8 +565,9 @@ class TestNLoptDriver(unittest.TestCase):
         prob.driver.options["optimizer"] = "LD_SLSQP"
         prob.driver.options["tol"] = 1e-9
 
-        model.add_design_var("x", lower=-50.0, upper=50.0, ref=0.02)
-        model.add_design_var("y", lower=-50.0, upper=50.0, ref=0.02)
+        # GB: Something changed in OMDAO v3.44 and only ref values >=1 work here
+        model.add_design_var("x", lower=-50.0, upper=50.0, ref=1.0)
+        model.add_design_var("y", lower=-50.0, upper=50.0, ref=1.0)
         model.add_objective("f_xy")
         model.add_constraint("c", lower=10.0, upper=11.0)
 
