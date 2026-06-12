@@ -6,10 +6,10 @@ More info at https://nlopt.readthedocs.io/
 
 
 import numpy as np
-import openmdao
 import openmdao.utils.coloring as coloring_mod
 from openmdao.core.driver import Driver, RecordingDebugging
 from openmdao.utils.om_warnings import issue_warning
+from openmdao.core.constants import INF_BOUND
 
 try:
     from openmdao.utils.class_util import weak_method_wrapper as weak_method_wrapper
@@ -339,7 +339,7 @@ class NLoptDriver(Driver):
                         if isinstance(lower, np.ndarray):
                             lower = lower[j]
 
-                        dblcon = (upper < openmdao.INF_BOUND) and (lower > -openmdao.INF_BOUND)
+                        dblcon = (upper < INF_BOUND) and (lower > -INF_BOUND)
 
                         # Add extra constraint if double-sided
                         if dblcon:
@@ -516,7 +516,7 @@ class NLoptDriver(Driver):
         if isinstance(lower, np.ndarray):
             lower = lower[idx]
 
-        if dbl or (lower <= -openmdao.INF_BOUND):
+        if dbl or (lower <= -INF_BOUND):
             if grad.size > 0:
                 grad[:] = grad_cache[grad_idx, :]
             return cons[name][idx] - upper
