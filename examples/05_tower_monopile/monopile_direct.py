@@ -26,8 +26,8 @@ htrans = 10.0
 pile_depth = 25.0
 water_depth = 30.0
 h_paramM = np.r_[pile_depth, water_depth, htrans]
-d_paramM = 0.9 * max_diam * np.ones(n_control_points)
-t_paramM = 0.02 * np.ones(n_control_points)
+d_paramM = 6.8 * np.ones(n_control_points)
+t_paramM = 0.04 * np.ones(n_control_points)
 # ---
 
 # Store analysis options in dictionary
