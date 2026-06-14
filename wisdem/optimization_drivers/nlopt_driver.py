@@ -4,12 +4,13 @@ OpenMDAO Wrapper for the NLopt package of optimizers.
 More info at https://nlopt.readthedocs.io/
 """
 
+import sys
 
 import numpy as np
-import openmdao
 import openmdao.utils.coloring as coloring_mod
 from openmdao.core.driver import Driver, RecordingDebugging
 from openmdao.utils.om_warnings import issue_warning
+from openmdao.core.constants import INF_BOUND
 
 try:
     from openmdao.utils.class_util import weak_method_wrapper as weak_method_wrapper
@@ -220,17 +221,22 @@ class NLoptDriver(Driver):
         """
         Optimize the problem using selected NLopt optimizer.
         """
+        self.result.reset()
         problem = self._problem()
         opt = self.options["optimizer"]
         model = problem.model
         self.iter_count = 0
         self._total_jac = None
+        self._total_jac_linear = None
+        self._desvar_array_cache = None
 
         self._check_for_missing_objective()
+        self._check_for_invalid_desvar_values()
 
         # Initial Run
-        with RecordingDebugging(self._get_name(), self.iter_count, self) as rec:
-            model.run_solve_nonlinear()
+        with RecordingDebugging(self._get_name(), self.iter_count, self):
+            with model._relevance.nonlinear_active('iter'):
+                model.run_solve_nonlinear()
             self.iter_count += 1
 
         self._con_cache = self.get_constraint_values()
@@ -238,42 +244,45 @@ class NLoptDriver(Driver):
         self._dvlist = list(self._designvars)
 
         # Size Problem
-        nparam = 0
-        for param in self._designvars.values():
-            nparam += param["size"]
-        x_init = np.empty(nparam)
+        ndesvar = 0
+        for desvar in self._designvars.values():
+            size = desvar['size']
+            ndesvar += size
+        x_init = np.empty(ndesvar)
+
+        if ndesvar == 0:
+            raise RuntimeError('Problem has no design variables.')
 
         # Initialize the NLopt problem with the method and number of design vars
-        opt_prob = nlopt.opt(optimizer_methods[opt], int(nparam))
+        opt_prob = nlopt.opt(optimizer_methods[opt], int(ndesvar))
 
         # Initial Design Vars
         i = 0
-        use_bounds = opt in _bounds_optimizers
+        use_bounds = (opt in _bounds_optimizers)
         if use_bounds:
             bounds = []
         else:
             bounds = None
 
-        # Loop through all OpenMDAO design variables and process their bounds
+        lower_dv, upper_dv, _ = self._autoscaler.get_bounds_scaling('design_var')
+
         for name, meta in self._designvars.items():
-            size = meta["size"]
-            x_init[i : i + size] = desvar_vals[name]
+            size = meta['global_size'] if meta['distributed'] else meta['size']
+            x_init[i:i + size] = desvar_vals[name]
             i += size
 
             # Bounds if our optimizer supports them
             if use_bounds:
-                meta_low = meta["lower"]
-                meta_high = meta["upper"]
+                meta_low = lower_dv[name]
+                meta_high = upper_dv[name]
                 for j in range(size):
-                    if isinstance(meta_low, np.ndarray):
-                        p_low = meta_low[j]
-                    else:
-                        p_low = meta_low
+                    p_low = meta_low[j]
+                    p_high = meta_high[j]
 
-                    if isinstance(meta_high, np.ndarray):
-                        p_high = meta_high[j]
-                    else:
-                        p_high = meta_high
+                    if p_low <= -INF_BOUND:
+                        p_low = None
+                    if p_high >= INF_BOUND:
+                        p_high = None
 
                     bounds.append((p_low, p_high))
 
@@ -286,27 +295,43 @@ class NLoptDriver(Driver):
             opt_prob.set_upper_bounds(upper)
 
         # Constraints
-        i = 1  # start at 1 since row 0 is the objective.  Constraints start at row 1.
+        nl_i = 1  # start at 1 since row 0 is the objective.  Constraints start at row 1.
         lin_i = 0  # counter for linear constraint jacobian
         lincons = []  # list of linear constraints
         self._obj_and_nlcons = list(self._objs)
 
-        # Process and add constraints to the optimization problem.
         if opt in _constraint_optimizers:
-            for name, meta in self._cons.items():
-                size = meta["global_size"] if meta["distributed"] else meta["size"]
-                upper = meta["upper"]
-                lower = meta["lower"]
-                equals = meta["equals"]
+            # get list of linear constraints and precalculate gradients for them (if any)
+            if opt in _constraint_grad_optimizers:
+                lincons = [name for name, meta in self._cons.items() if meta.get('linear')]
+            else:
+                lincons = []
 
-                if opt in _gradient_optimizers and "linear" in meta and meta["linear"]:
-                    lincons.append(name)
+            if lincons:
+                self._lincongrad_cache = self._compute_totals(of=lincons, wrt=self._dvlist, return_format='array')
+            else:
+                self._lincongrad_cache = None
+
+            lower_con, upper_con, equals_con = self._autoscaler.get_bounds_scaling('constraint')
+
+            # map constraints to index and instantiate constraints for scipy
+            for name, meta in self._cons.items():
+                if meta['indices'] is not None:
+                    meta['size'] = size = meta['indices'].indexed_src_size
+                else:
+                    size = meta['global_size'] if meta['distributed'] else meta['size']
+                upper = upper_con[name]
+                lower = lower_con[name]
+                equals = equals_con[name] if meta['equals'] is not None else None
+                linear = name in lincons
+
+                if linear:
                     self._con_idx[name] = lin_i
                     lin_i += size
                 else:
                     self._obj_and_nlcons.append(name)
-                    self._con_idx[name] = i
-                    i += size
+                    self._con_idx[name] = nl_i
+                    nl_i += size
 
                 # Loop over every index separately,
                 # because it's easier to defined each
@@ -339,7 +364,7 @@ class NLoptDriver(Driver):
                         if isinstance(lower, np.ndarray):
                             lower = lower[j]
 
-                        dblcon = (upper < openmdao.INF_BOUND) and (lower > -openmdao.INF_BOUND)
+                        dblcon = (upper < INF_BOUND) and (lower > -INF_BOUND)
 
                         # Add extra constraint if double-sided
                         if dblcon:
@@ -386,7 +411,7 @@ class NLoptDriver(Driver):
                 raise NotImplementedError(msg.format(opt, _optimizers))
 
         # If an exception was swallowed in one of our callbacks, we want to raise it
-        except Exception as msg:
+        except Exception:
             if self._exc_info is not None:
                 self._reraise()
             else:
@@ -395,6 +420,7 @@ class NLoptDriver(Driver):
         if self._exc_info is not None:
             self._reraise()
 
+            
     def _objfunc(self, x_new, grad):
         """
         Evaluate and return the objective function.
@@ -414,22 +440,22 @@ class NLoptDriver(Driver):
         float
             Value of the objective function evaluated at the new design point.
         """
+        
         model = self._problem().model
+        dv_vec = self._vectors['design_var']
         f_new = 1e10
 
         try:
-            # Pass in new parameters
-            i = 0
-            for name, meta in self._designvars.items():
-                size = meta["size"]
-                self.set_design_var(name, x_new[i : i + size])
-                i += size
+            # Update the cached design variable vector
+            dv_vec.set_data(x_new, driver_scaling=True)
 
-            with RecordingDebugging(self._get_name(), self.iter_count, self) as rec:
+            # Design variables in dv_vec are now in optimizer scaled space and in driver-units.
+            self._set_design_vars(driver_scaling=True)
+
+            with RecordingDebugging(self._get_name(), self.iter_count, self):
                 self.iter_count += 1
-
-                # This is the actual model evaluation for OpenMDAO
-                model.run_solve_nonlinear()
+                with model._relevance.nonlinear_active('iter'):
+                    model.run_solve_nonlinear()
 
             # Get the objective function evaluations
             f_new = list(self.get_objective_values().values())[0]
@@ -490,6 +516,8 @@ class NLoptDriver(Driver):
         cons = self._con_cache
         meta = self._cons[name]
 
+        lower_con, upper_con, equals_con = self._autoscaler.get_bounds_scaling('constraint')
+
         if meta["linear"]:
             grad_cache = self._lincongrad_cache
         else:
@@ -498,25 +526,27 @@ class NLoptDriver(Driver):
         grad_idx = self._con_idx[name] + idx
 
         # Equality constraints
-        equals = meta["equals"]
-        if equals is not None:
-            if isinstance(equals, np.ndarray):
-                equals = equals[idx]
+        if meta['equals'] is not None:
+            eq = equals_con[name]
             if grad.size > 0:
                 grad[:] = grad_cache[grad_idx, :]
-            return cons[name][idx] - equals
+            return cons[name][idx] - eq[idx]
+        
+        # Equality constraints
+        #equals = meta["equals"]
+        #if equals is not None:
+        #    if isinstance(equals, np.ndarray):
+        #        equals = equals[idx]
+        #    if grad.size > 0:
+        #        grad[:] = grad_cache[grad_idx, :]
+        #    return cons[name][idx] - equals
 
         # Note, NLopt defines constraints to be satisfied when negative,
         # which is the same as OpenMDAO.
-        upper = meta["upper"]
-        if isinstance(upper, np.ndarray):
-            upper = upper[idx]
+        upper = upper_con[name][idx]
+        lower = lower_con[name][idx]
 
-        lower = meta["lower"]
-        if isinstance(lower, np.ndarray):
-            lower = lower[idx]
-
-        if dbl or (lower <= -openmdao.INF_BOUND):
+        if dbl or (lower <= -INF_BOUND):
             if grad.size > 0:
                 grad[:] = grad_cache[grad_idx, :]
             return cons[name][idx] - upper

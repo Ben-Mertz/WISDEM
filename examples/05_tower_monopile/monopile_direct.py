@@ -26,8 +26,8 @@ htrans = 10.0
 pile_depth = 25.0
 water_depth = 30.0
 h_paramM = np.r_[pile_depth, water_depth, htrans]
-d_paramM = 0.9 * max_diam * np.ones(n_control_points)
-t_paramM = 0.02 * np.ones(n_control_points)
+d_paramM = 6.8 * np.ones(n_control_points)
+t_paramM = 0.04 * np.ones(n_control_points)
 # ---
 
 # Store analysis options in dictionary
@@ -59,7 +59,7 @@ modeling_options["WISDEM"]["FixedBottomSE"]["gamma_fatigue"] = 1.35 * 1.3 * 1.0
 modeling_options["WISDEM"]["FixedBottomSE"]["frame3dd"] = {}
 modeling_options["WISDEM"]["FixedBottomSE"]["frame3dd"]["shear"] = True
 modeling_options["WISDEM"]["FixedBottomSE"]["frame3dd"]["geom"] = True
-modeling_options["WISDEM"]["FixedBottomSE"]["frame3dd"]["tol"] = 1e-7
+modeling_options["WISDEM"]["FixedBottomSE"]["frame3dd"]["tol"] = 1e-8
 modeling_options["WISDEM"]["FixedBottomSE"]["frame3dd"]["modal_method"] = 1
 modeling_options["WISDEM"]["FixedBottomSE"]["rank_and_file"] = False
 
@@ -78,8 +78,8 @@ if opt_flag:
     # Choose the optimizer to use
     prob.driver = om.ScipyOptimizeDriver()
     prob.driver.options["optimizer"] = "SLSQP"
-    prob.driver.options["maxiter"] = 40
-    prob.driver.options["tol"] = 1e-2
+    prob.driver.options["maxiter"] = 20
+    prob.driver.options["tol"] = 1e-3
 
     # Add objective
     # prob.model.add_objective('tower_mass', ref=1e6) # Only tower
