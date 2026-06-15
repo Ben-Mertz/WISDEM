@@ -1497,11 +1497,11 @@ class WindTurbineOntologyPython(object):
         if self.modeling_options["flags"]["control"]:
             self.wt_init["control"]["optimal_tsr"] = float(wt_opt["control.rated_TSR"][0])
             if self.modeling_options["flags"]["blade"]:
-                self.wt_init["control"]["min_rotor_speed"] = float(min(wt_opt["rotorse.rp.powercurve.Omega"]))
-                self.wt_init["control"]["max_rotor_speed"] = float(max(wt_opt["rotorse.rp.powercurve.Omega"]))
-                self.wt_init["control"]["rated_rotor_speed"] = float(max(wt_opt["rotorse.rp.powercurve.rated_Omega"]))
-                self.wt_init["control"]["max_gen_torque"] = float(max(wt_opt["rotorse.rp.powercurve.Q"]))
-                self.wt_init["control"]["min_pitch_limit"] = float(min(wt_opt["rotorse.rp.powercurve.pitch"]))
+                self.wt_init["control"]["min_rotor_speed"] = float(max(0, np.min(wt_opt["rotorse.rp.powercurve.Omega"]))) # floor it to 0 to avoid validation error
+                self.wt_init["control"]["max_rotor_speed"] = float(max(0, np.max(wt_opt["rotorse.rp.powercurve.Omega"]))) # floor it to 0 to avoid validation error
+                self.wt_init["control"]["rated_rotor_speed"] = float(max(0, wt_opt["rotorse.rp.powercurve.rated_Omega"][0])) # floor it to 0 to avoid validation error
+                self.wt_init["control"]["max_gen_torque"] = float(max(0, np.max(wt_opt["rotorse.rp.powercurve.Q"]))) # floor it to 0 to avoid validation error
+                self.wt_init["control"]["min_pitch_limit"] = float(min(90, max(-90, np.min(wt_opt["rotorse.rp.powercurve.pitch"])))) # keep it between -90 and 90 to avoid validation error
 
             if "ROSCO" not in self.modeling_options:  # If using WEIS, will have ROSCO, and peak_thrust_shaving will be set there
                 self.wt_init["control"]["peak_thrust_shaving"] = float(wt_opt["control.peak_thrust_shaving"][0])
