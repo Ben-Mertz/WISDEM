@@ -4,13 +4,10 @@ OpenMDAO Wrapper for the NLopt package of optimizers.
 More info at https://nlopt.readthedocs.io/
 """
 
-import sys
-
 import numpy as np
-import openmdao.utils.coloring as coloring_mod
 from openmdao.core.driver import Driver, RecordingDebugging
-from openmdao.utils.om_warnings import issue_warning
 from openmdao.core.constants import INF_BOUND
+from openmdao.utils.mpi import MPI
 
 try:
     from openmdao.utils.class_util import weak_method_wrapper as weak_method_wrapper
@@ -124,7 +121,7 @@ class NLoptDriver(Driver):
         if nlopt is None:
             raise RuntimeError("NLoptDriver is not available, NLopt is not installed.")
 
-        super(NLoptDriver, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         # What we support
         self.supports["inequality_constraints"] = True
@@ -202,7 +199,7 @@ class NLoptDriver(Driver):
         problem : <Problem>
             Pointer
         """
-        super(NLoptDriver, self)._setup_driver(problem)
+        super()._setup_driver(problem)
         opt = self.options["optimizer"]
 
         self.supports._read_only = False
@@ -217,6 +214,9 @@ class NLoptDriver(Driver):
             msg = "{} currently does not support multiple objectives."
             raise RuntimeError(msg.format(self.msginfo))
 
+        self._model_ran = False
+        self._setup_tot_jac_sparsity()
+        
     def run(self):
         """
         Optimize the problem using selected NLopt optimizer.
@@ -224,7 +224,6 @@ class NLoptDriver(Driver):
         self.result.reset()
         problem = self._problem()
         opt = self.options["optimizer"]
-        model = problem.model
         self.iter_count = 0
         self._total_jac = None
         self._total_jac_linear = None
@@ -234,10 +233,14 @@ class NLoptDriver(Driver):
         self._check_for_invalid_desvar_values()
 
         # Initial Run
+        model_ran = False
         with RecordingDebugging(self._get_name(), self.iter_count, self):
-            with model._relevance.nonlinear_active('iter'):
-                model.run_solve_nonlinear()
+            self._run_solve_nonlinear()
+            model_ran = True
             self.iter_count += 1
+
+        self._model_ran = model_ran
+        self._coloring_info.run_model = not model_ran
 
         self._con_cache = self.get_constraint_values()
         desvar_vals = self.get_design_var_values()
@@ -380,20 +383,7 @@ class NLoptDriver(Driver):
                 self._lincongrad_cache = None
 
         # compute dynamic simul deriv coloring if option is set
-        if coloring_mod._use_total_sparsity:
-            if self._coloring_info["coloring"] is None and self._coloring_info["dynamic"]:
-                coloring_mod.dynamic_total_coloring(self, run_model=False, fname=self._get_total_coloring_fname())
-
-                # if the improvement wasn't large enough, turn coloring off
-                info = self._coloring_info
-                if info["coloring"] is not None:
-                    pct = info["coloring"]._solves_info()[-1]
-                    if info["min_improve_pct"] > pct:
-                        info["coloring"] = info["static"] = None
-                        issue_warning(
-                            "%s: Coloring was deactivated.  Improvement of %.1f%% was "
-                            "less than min allowed (%.1f%%)." % (self.msginfo, pct, info["min_improve_pct"])
-                        )
+        problem.get_total_coloring(self._coloring_info, run_model=False)
 
         # Finalize the optimization problem setup and actually perform optimization
         try:
@@ -446,6 +436,12 @@ class NLoptDriver(Driver):
         f_new = 1e10
 
         try:
+
+            # Broadcast same x_new to all ranks
+            if MPI:
+                model.comm.Bcast(x_new, root=0)
+                model.comm.Bcast(grad, root=0)
+
             # Update the cached design variable vector
             dv_vec.set_data(x_new, driver_scaling=True)
 
@@ -454,8 +450,8 @@ class NLoptDriver(Driver):
 
             with RecordingDebugging(self._get_name(), self.iter_count, self):
                 self.iter_count += 1
-                with model._relevance.nonlinear_active('iter'):
-                    model.run_solve_nonlinear()
+                self._run_solve_nonlinear()
+                self._model_ran = True
 
             # Get the objective function evaluations
             f_new = list(self.get_objective_values().values())[0]
