@@ -294,6 +294,63 @@ class Polar(object):
         logger.debug('[WARN] Polar: "fromfile" is depreciated and will be removed in a future release')
         return cls(filename, fformat=fformat, compute_params=compute_params, radians=to_radians)
 
+    def correctionLEE(
+        self,
+        tcr,
+        damage_cat,
+        delta_method = "provided_deltas"
+    ):
+        """Applies corrections to lift and drag polars for leading edge erosion.
+
+        Parameters
+        ----------
+        tcr : float
+            thickness-to-chord ratio of the airfoil
+        damage_cat : float
+            damage catagory level to be applied in correction
+        delta_method : string
+            defining method used for specifying the way the lift and drag polars with be modified; 
+                - default 'providing_deltas' (provide .dat file with normalized angle of attack (n_alpha=alpha/alpha_Clmax), changes in lift coefficient, and changes in drag coefficient) 
+                    TODO: Standardize formatting of the file and have users provide link to that file
+                - TODO: implement other methods such as providing eroded polars and calculating the deltas or interpolating between eroded polars of different erosion catagolies 
+        Returns
+        -------
+        polar : Polar
+            A new Polar object corrected for leading edge erosion effects
+
+        """
+        if delta_method == "provided_deltas":
+            if tcr <= 0.22:
+                n_alpha, dcl, dcd = np.loadtxt('/home/mertzb/Documents/LEE_codes/Erosion_Data/LEE_Deltas_FFA21_Cat4.dat',unpack=True) # TODO: This path to the file needs to be provided externally at some point 
+                d_cat_ref = 4.0 # This could eventually be a part of input file
+                max_index = np.argmax(self.cl) # Find index of max lift coefficient
+            elif tcr > 0.22 and tcr <= 0.28:
+                n_alpha, dcl, dcd = np.loadtxt('/home/mertzb/Documents/LEE_codes/Erosion_Data/LEE_Deltas_FFA24_Cat4.dat',unpack=True) # TODO: This path to the file needs to be provided externally at some point
+                d_cat_ref = 4.0 # This could eventually be a part of input file
+                max_index = np.argmax(self.cl) # Find index of max lift coefficient
+            else:
+                n_alpha = np.zeros(15)
+                dcl = np.zeros(15)
+                dcd = np.zeros(15)
+                d_cat_ref = 4.0
+                max_index = 50
+
+            # max_index = np.argmax(self.cl) # Find index of max lift coefficient
+            alpha_max = self.alpha[max_index] # Find anagle attack max lift coefficient
+            alpha_norm = self.alpha/alpha_max # Normalize angle of attack relative to angle of attack at maximum lift coefficient
+            dcl_interp = np.interp(alpha_norm,n_alpha,dcl) # Interpolate lift coefficient deltas
+            dcd_interp = np.interp(alpha_norm,n_alpha,dcd) # Interpolate drag coefficient deltas
+
+            # Correct lift and drag coefficients for LEE damage
+            cl_new = self.cl + damage_cat/d_cat_ref * dcl_interp
+            cd_new = self.cd + damage_cat/d_cat_ref * dcd_interp
+        else:
+            print('You need to provide a valid method for modeling leading edge erosion')
+
+
+        return type(self)(Re=self.Re, alpha=self.alpha, cl=cl_new, cd=cd_new, cm=self.cm, radians=False)
+        # return type(self)(Re=self.Re, alpha=np.degrees(self.alpha), cl=cl_new, cd=cd_new, cm=self.cm, radians=False)
+    
     def correction3D(
         self,
         r_over_R,
