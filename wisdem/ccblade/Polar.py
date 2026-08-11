@@ -4,9 +4,10 @@
   - thicknessinterp_from_one_set: interpolate polars at different thickeness based on one set of polars 
 """
 
-import os
+import os, copy
 import numpy as np
 from wisdem.ccblade.polar_file import loadPolarFile # For IO
+from openfast_io.FAST_reader import readline_filterComments, readline_ignoreComments, read_array, bool_read, float_read, int_read
 
 class NoCrossingException(Exception):
     pass
@@ -298,7 +299,8 @@ class Polar(object):
         self,
         tcr,
         damage_cat,
-        delta_method = "provided_deltas"
+        deltas_filename,
+        delta_method = "provided_deltas",
     ):
         """Applies corrections to lift and drag polars for leading edge erosion.
 
@@ -308,10 +310,11 @@ class Polar(object):
             thickness-to-chord ratio of the airfoil
         damage_cat : float
             damage catagory level to be applied in correction
+        deltas_filename : string
+            filename (including path) to formatted file with deltas of the lift and drag coefficients (along with other parameters)
         delta_method : string
             defining method used for specifying the way the lift and drag polars with be modified; 
-                - default 'providing_deltas' (provide .dat file with normalized angle of attack (n_alpha=alpha/alpha_Clmax), changes in lift coefficient, and changes in drag coefficient) 
-                    TODO: Standardize formatting of the file and have users provide link to that file
+                - default 'providing_deltas' (provide .dat file (from deltas_filename variable) with normalized angle of attack (n_alpha=alpha/alpha_Clmax), changes in lift coefficient, and changes in drag coefficient) 
                 - TODO: implement other methods such as providing eroded polars and calculating the deltas or interpolating between eroded polars of different erosion catagolies 
         Returns
         -------
@@ -320,37 +323,96 @@ class Polar(object):
 
         """
         if delta_method == "provided_deltas":
-            if tcr <= 0.22:
-                n_alpha, dcl, dcd = np.loadtxt('/home/mertzb/Documents/LEE_codes/Erosion_Data/LEE_Deltas_FFA21_Cat4.dat',unpack=True) # TODO: This path to the file needs to be provided externally at some point 
-                d_cat_ref = 4.0 # This could eventually be a part of input file
-                max_index = np.argmax(self.cl) # Find index of max lift coefficient
-            elif tcr > 0.22 and tcr <= 0.28:
-                n_alpha, dcl, dcd = np.loadtxt('/home/mertzb/Documents/LEE_codes/Erosion_Data/LEE_Deltas_FFA24_Cat4.dat',unpack=True) # TODO: This path to the file needs to be provided externally at some point
-                d_cat_ref = 4.0 # This could eventually be a part of input file
-                max_index = np.argmax(self.cl) # Find index of max lift coefficient
-            else:
-                n_alpha = np.zeros(15)
-                dcl = np.zeros(15)
-                dcd = np.zeros(15)
-                d_cat_ref = 4.0
-                max_index = 50
+            dat = self.LEE_reader(deltas_filename) # Calls the reader function...user needs to specify this file in the required format 
+            for i in range(dat[0]['NumTabs']): # If there are multiple airfoils deltas provided
+                if tcr <= dat[i]['TCRmax'] and tcr >= dat[i]['TCRmin']: # Note that if there is overlap in the provided ranges of thickness-to-chord ratios, only the first one will be used
+                    # Initialize variables
+                    n_alpha = np.zeros(dat[i]['NumAlf'])
+                    dcl = np.zeros(dat[i]['NumAlf'])
+                    dcd = np.zeros(dat[i]['NumAlf'])
+                    # Find index of location of max Cl (will be used to normalize angle of attacks)
+                    max_index = np.argmax(self.cl)
+                    # Pull data from provided file
+                    n_alpha = dat[i]['nalf']
+                    for j in range(dat[i]['NumAlf']):
+                        dcl[j] = np.interp(damage_cat,[0.0] + dat[i]['DamCat'],[0.0] + dat[i]['dCl'][j])
+                        dcd[j] = np.interp(damage_cat,[0.0] + dat[i]['DamCat'],[0.0] + dat[i]['dCd'][j])
+                    break
+                else:
+                    # No change in coefficients if thickness-to-chord ratio is not included in provided data
+                    n_alpha = np.zeros(15)
+                    dcl = np.zeros(15)
+                    dcd = np.zeros(15)
+                    max_index = 50
 
-            # max_index = np.argmax(self.cl) # Find index of max lift coefficient
             alpha_max = self.alpha[max_index] # Find anagle attack max lift coefficient
             alpha_norm = self.alpha/alpha_max # Normalize angle of attack relative to angle of attack at maximum lift coefficient
             dcl_interp = np.interp(alpha_norm,n_alpha,dcl) # Interpolate lift coefficient deltas
             dcd_interp = np.interp(alpha_norm,n_alpha,dcd) # Interpolate drag coefficient deltas
 
             # Correct lift and drag coefficients for LEE damage
-            cl_new = self.cl + damage_cat/d_cat_ref * dcl_interp
-            cd_new = self.cd + damage_cat/d_cat_ref * dcd_interp
+            cl_new = self.cl + dcl_interp
+            cd_new = self.cd + dcd_interp
+
         else:
             print('You need to provide a valid method for modeling leading edge erosion')
 
-
         return type(self)(Re=self.Re, alpha=self.alpha, cl=cl_new, cd=cd_new, cm=self.cm, radians=False)
-        # return type(self)(Re=self.Re, alpha=np.degrees(self.alpha), cl=cl_new, cd=cd_new, cm=self.cm, radians=False)
     
+    def LEE_reader(self, deltafilename):
+        """Loads in data from Leading edge erosion data file that has been properly formatted.
+
+        Parameters
+        ----------
+        deltas_filename : string
+            filename (including path) to formatted file with deltas of the lift and drag coefficients (along with other parameters)
+
+        Returns
+        -------
+        deltasout : Dictionary
+            A dictionary containing the data for leading edge erosion from the provided file
+
+        """
+        f = open(deltafilename)
+        deltas = {}
+        deltasout = {}
+        # First 5 lines of header are discarded
+        f.readline()
+        f.readline()
+        f.readline()
+        f.readline()
+        f.readline()
+        deltas['NumTabs'] = int_read(readline_filterComments(f).split()[0]) # Read in number of airfoil delta tables provided
+        for tab in range(deltas['NumTabs']): # Loop through each airfoil delta tables
+            # First 3 lines of header/title spacer discarded
+            f.readline()
+            f.readline()
+            f.readline()
+            # Read in preliminary information about erosion impacts
+            deltas['TCRmin'] = float_read(readline_filterComments(f).split()[0])
+            deltas['TCRmax'] = float_read(readline_filterComments(f).split()[0])
+            deltas['NumDam'] = int_read(readline_filterComments(f).split()[0])
+            deltas['DamCat'] = read_array(f,deltas['NumDam'],split_val=' ',array_type=float)
+            # Remove 2 lines of header/title spacer
+            f.readline()
+            f.readline()
+            deltas['NumAlf'] = int_read(readline_filterComments(f).split()[0]) # Number of normalized angles of attack the deltas are provided for
+            f.readline() # Remove spacer comment
+            # Initialize list items where data will be placed
+            deltas['nalf'] = [None]*deltas['NumAlf']
+            deltas['dCl'] = [None]*deltas['NumAlf']
+            deltas['dCd'] = [None]*deltas['NumAlf']
+            # Loop through each line in deltas table
+            for i in range(deltas['NumAlf']):
+                data = [float(val) for val in readline_filterComments(f).split()]
+                deltas['nalf'][i] = data [0]
+                deltas['dCl'][i] = data [1:deltas['NumDam']*2:2] # Pulls out lift coefficient deltas for each damage catagor provided
+                deltas['dCd'][i] = data [2:deltas['NumDam']*2+1:2] # Pulls out drag coefficient deltas for each damage catagor provided
+            deltasout[tab] = copy.copy(deltas) # For multiple tables...copy into output dictionary before moving on to the next table
+            
+        f.close()
+        return deltasout
+
     def correction3D(
         self,
         r_over_R,
